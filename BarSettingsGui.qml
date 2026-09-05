@@ -1085,8 +1085,7 @@ FormRow {
 
                 Dropdown {
                   id: logoModeDD
-                  label: "Logo"
-                  showLabel: true
+                  showLabel: false
                   foreground: root.text
                   value: root.logoMode()
                   options: [
@@ -1194,45 +1193,6 @@ FormRow {
                 }
               }
 
-              FormRow {
-                label: "Color"
-
-                Dropdown {
-                  id: logoColorDD
-                  label: "Theme"
-                  showLabel: true
-                  foreground: root.text
-                  value: {
-                    var token = root.logoVal("logoColor", "")
-                    if (token === "" || token === "accent" || token === "foreground" || token === "urgent" || token === "muted" || token === "background") return token
-                    return "#custom"
-                  }
-                  options: [
-                    { value: "", label: "Foreground (default)" },
-                    { value: "accent", label: "Accent" },
-                    { value: "urgent", label: "Urgent" },
-                    { value: "muted", label: "Muted" },
-                    { value: "background", label: "Background" },
-                    { value: "#custom", label: "Custom (#hex)" }
-                  ]
-                  onChanged: function(value) {
-                    var token = value === "" || value === "#custom" ? "" : value
-                    root.setLogo("logoColor", token === "" ? null : token)
-                    root.regenerateTintedLogo(token)
-                  }
-                }
-
-                Rectangle {
-                  Layout.alignment: Qt.AlignVCenter
-                  width: logoColorDD.rowHeight
-                  height: logoColorDD.rowHeight
-                  radius: Math.min(Style.cornerRadius, height / 4)
-                  color: root.resolvedLogoColor()
-                  border.color: root.textDim
-                  border.width: 1
-                }
-              }
-
               SectionHeader {
                 title: "IMAGE"
                 hint: "shown instead of the glyph"
@@ -1281,6 +1241,51 @@ FormRow {
                     root.pickerError = ""
                     whichZenity.running = true
                   }
+                }
+              }
+
+              SectionHeader {
+                title: "COLOR"
+                hint: "applies to glyph and SVG tint"
+                visible: root.menuEntryId !== ""
+              }
+
+              FormRow {
+                label: "Color"
+
+                Dropdown {
+                  id: logoColorDD
+                  label: "Theme"
+                  showLabel: true
+                  foreground: root.text
+                  value: {
+                    var token = root.logoVal("logoColor", "")
+                    if (token === "" || token === "accent" || token === "foreground" || token === "urgent" || token === "muted" || token === "background") return token
+                    return "#custom"
+                  }
+                  options: [
+                    { value: "", label: "Foreground (default)" },
+                    { value: "accent", label: "Accent" },
+                    { value: "urgent", label: "Urgent" },
+                    { value: "muted", label: "Muted" },
+                    { value: "background", label: "Background" },
+                    { value: "#custom", label: "Custom (#hex)" }
+                  ]
+                  onChanged: function(value) {
+                    var token = value === "" || value === "#custom" ? "" : value
+                    root.setLogo("logoColor", token === "" ? null : token)
+                    root.regenerateTintedLogo(token)
+                  }
+                }
+
+                Rectangle {
+                  Layout.alignment: Qt.AlignVCenter
+                  width: logoColorDD.rowHeight
+                  height: logoColorDD.rowHeight
+                  radius: Math.min(Style.cornerRadius, height / 4)
+                  color: root.resolvedLogoColor()
+                  border.color: root.textDim
+                  border.width: 1
                 }
               }
             }
