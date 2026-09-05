@@ -2,7 +2,6 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
-import QtQuick.Effects
 import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
@@ -65,6 +64,7 @@ Item {
 
   function open(payloadJson) {
     root.opened = true
+    regenerateTintedLogo()
   }
 
   function close() {
@@ -378,8 +378,7 @@ Item {
 
   // Theme tokens for the logo color, resolved live so the preview follows
   // theme changes; literal #rrggbb still honored for manual control.
-  function resolvedLogoColor() {
-    var token = root.logoVal("logoColor", "")
+  function colorForToken(token) {
     if (token === "accent") return Color.accent
     if (token === "foreground") return Color.foreground
     if (token === "urgent") return Color.urgent
@@ -387,6 +386,56 @@ Item {
     if (token === "background") return Color.background
     if (/^#[0-9A-Fa-f]{6}$/.test(token)) return token
     return Color.foreground
+  }
+
+  function resolvedLogoColor() {
+    return colorForToken(root.logoVal("logoColor", ""))
+  }
+
+  // The image actually displayed: when a color is set, a tinted copy of
+  // the SVG (fills rewritten, cached) is generated at pick time.
+  function effectiveLogoSource() {
+    var tinted = root.logoVal("logoImageTinted", "")
+    if (root.logoVal("logoColor", "") !== "" && tinted !== "") {
+      if (tinted.indexOf("~/") === 0) tinted = Quickshell.env("HOME") + tinted.substring(1)
+      return "file://" + tinted
+    }
+    var path = root.logoVal("logoImage", "")
+    if (path === "") return ""
+    if (path.indexOf("~/") === 0) path = Quickshell.env("HOME") + path.substring(1)
+    return "file://" + path
+  }
+
+  // Callers pass the just-chosen token/image explicitly: reading cfg back
+  // immediately after setLogo races QML's lazy binding propagation and
+  // would tint with the previous color.
+  function regenerateTintedLogo(forcedToken, forcedImage) {
+    var image = forcedImage !== undefined ? forcedImage : root.logoVal("logoImage", "")
+    var token = forcedToken !== undefined ? forcedToken : root.logoVal("logoColor", "")
+    if (image === "" || token === "") {
+      if (root.logoVal("logoImageTinted", "") !== "") root.setLogo("logoImageTinted", null)
+      return
+    }
+    var color = colorForToken(token).toString()
+    var home = Quickshell.env("HOME")
+    var src = image.indexOf("~/") === 0 ? home + image.substring(1) : image
+    var cache = home + "/.cache/skal-bar/logo.svg"
+    var script = 's/fill="(none|transparent)"/fill="__KEEP__"/g; '
+      + 's/fill="[^"]*"/fill="' + color + '"/g; '
+      + 's/fill:(none|transparent)/fill:__KEEP__/g; '
+      + 's/fill:[^;"}]+/fill:' + color + '/g; '
+      + 's/stroke="[^"]*"/stroke="' + color + '"/g; '
+      + 's/__KEEP__/none/g'
+    tintProc.command = ["bash", "-c",
+      "mkdir -p '" + home + "/.cache/skal-bar' && sed -E '" + script + "' '" + src + "' > '" + cache + "'"]
+    tintProc.running = true
+  }
+
+  Process {
+    id: tintProc
+    onExited: function(exitCode) {
+      if (exitCode === 0) root.setLogo("logoImageTinted", "~/.cache/skal-bar/logo.svg")
+    }
   }
 
   function logoMode() {
@@ -437,7 +486,10 @@ Item {
     stdout: SplitParser {
       onRead: function(line) {
         var path = String(line).trim()
-        if (path !== "") root.setLogo("logoImage", path)
+        if (path !== "") {
+          root.setLogo("logoImage", path)
+          root.regenerateTintedLogo(undefined, path)
+        }
       }
     }
     onExited: {
@@ -1083,56 +1135,12 @@ FormRow {
                     width: height
 
                     Image {
-                      id: previewLogoBitmap
                       anchors.fill: parent
-                      source: {
-                        var path = root.logoVal("logoImage", "")
-                        if (path === "") return ""
-                        if (path.indexOf("~/") === 0) path = Quickshell.env("HOME") + path.substring(1)
-                        return "file://" + path
-                      }
+                      source: root.effectiveLogoSource()
                       sourceSize: Qt.size(96, 96)
                       fillMode: Image.PreserveAspectFit
                       smooth: true
                       mipmap: true
-                      visible: true
-                    }
-
-                    ShaderEffectSource {
-                      id: previewLogoSource
-                      anchors.fill: previewLogoBitmap
-                      sourceItem: previewLogoBitmap
-                      hideSource: root.logoVal("logoColor", "") !== ""
-                      visible: root.logoVal("logoColor", "") !== ""
-                      live: true
-                    }
-
-                    ShaderEffect {
-                      anchors.fill: previewLogoBitmap
-                      visible: root.logoVal("logoColor", "") !== ""
-                      property var source: previewLogoSource
-                      property color tint: root.resolvedLogoColor()
-                      fragmentShader: "LogoTint.qsb"
-                    }
-                  }
-                }
-
-                Row {
-                  anchors.right: parent.right
-                  anchors.rightMargin: Style.space(8)
-                  anchors.verticalCenter: parent.verticalCenter
-                  spacing: Style.space(3)
-                  opacity: 0.25
-
-                  Repeater {
-                    model: 3
-
-                    Rectangle {
-                      required property var modelData
-                      width: Style.space(3)
-                      height: Style.space(3)
-                      radius: width / 2
-                      color: Color.bar.text
                     }
                   }
                 }
@@ -1207,14 +1215,16 @@ FormRow {
                     { value: "#custom", label: "Custom (#hex)" }
                   ]
                   onChanged: function(value) {
-                    root.setLogo("logoColor", value === "" || value === "#custom" ? null : value)
+                    var token = value === "" || value === "#custom" ? "" : value
+                    root.setLogo("logoColor", token === "" ? null : token)
+                    root.regenerateTintedLogo(token)
                   }
                 }
 
                 Rectangle {
                   Layout.alignment: Qt.AlignVCenter
-                  width: logoColorDD.implicitHeight
-                  height: logoColorDD.implicitHeight
+                  width: logoColorDD.rowHeight
+                  height: logoColorDD.rowHeight
                   radius: Math.min(Style.cornerRadius, height / 4)
                   color: root.resolvedLogoColor()
                   border.color: root.textDim
