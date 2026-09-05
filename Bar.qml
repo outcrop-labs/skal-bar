@@ -409,6 +409,30 @@ Item {
     return hiddenReveal
   }
 
+  // A bar item's display name for hover tooltips, from the widget registry.
+  function widgetDisplayName(id) {
+    var widgets = barWidgetRegistry ? barWidgetRegistry.widgets : null
+    var found = widgets ? widgets[canonicalWidgetId(id)] : null
+    if (found && found.displayName) {
+      var name = String(found.displayName)
+      var dot = name.lastIndexOf(".")
+      return dot === -1 ? name : name.substring(dot + 1)
+    }
+    return String(id || "")
+  }
+
+  // Hovering an item shows its name — unless the widget brings its own
+  // tooltip, in which case theirs wins. Starting a drag clears it (the
+  // drag path already hides the tooltip for the dragged item).
+  function showWidgetNameTooltip(slot) {
+    var item = slot ? slot.activeItem : null
+    if (!item) return
+    if ("tooltipText" in item && String(item.tooltipText) !== "") return
+    var name = widgetDisplayName(slot.moduleName)
+    if (name === "") return
+    showTooltip(item, name)
+  }
+
   function revealIconFor(region) {
     var icon = String(revealIcons[String(region || "")] || "")
     return icon !== "" ? icon : "›"
@@ -2110,7 +2134,13 @@ Item {
       root.unregisterModuleSlot(slot)
     }
 
-    HoverHandler { id: moduleHover }
+    HoverHandler {
+      id: moduleHover
+      onHoveredChanged: {
+        if (hovered) root.showWidgetNameTooltip(slot)
+        else root.hideTooltip(slot.activeItem)
+      }
+    }
 
     BorderSurface {
       visible: slot.dragSource

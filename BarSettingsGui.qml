@@ -203,6 +203,35 @@ Item {
     })
   }
 
+  // Glyph for a widget's name tile, from the same nerd-font set the bar's
+  // own widgets render with. Empty string = text-only tile.
+  function glyphForWidget(id) {
+    var name = String(id || "").toLowerCase()
+    if (name.indexOf("clock") !== -1 || name.indexOf("time") !== -1) return "󰥔"
+    if (name.indexOf("audio") !== -1 || name.indexOf("volume") !== -1) return "󰕾"
+    if (name.indexOf("network") !== -1) return "󰖩"
+    if (name.indexOf("ethernet") !== -1 || name.indexOf("lan") !== -1) return "󰈀"
+    if (name.indexOf("wifi") !== -1) return "󰤨"
+    if (name.indexOf("bluetooth") !== -1) return "󰂯"
+    if (name.indexOf("power") !== -1 || name.indexOf("battery") !== -1) return "󰁹"
+    if (name.indexOf("weather") !== -1) return "󰖙"
+    if (name.indexOf("menu") !== -1 || name.indexOf("launcher") !== -1) return "󰣇"
+    if (name.indexOf("workspace") !== -1) return "󰘵"
+    if (name.indexOf("tray") !== -1) return "󰂲"
+    if (name.indexOf("keyboard") !== -1) return "󰌌"
+    if (name.indexOf("media") !== -1 || name.indexOf("music") !== -1) return "󰝚"
+    if (name.indexOf("microphone") !== -1) return "󰍬"
+    if (name.indexOf("monitor") !== -1 || name.indexOf("display") !== -1 || name.indexOf("brightness") !== -1) return "󰍹"
+    if (name.indexOf("update") !== -1) return "󰚰"
+    if (name.indexOf("agent") !== -1 || name.indexOf("copilot") !== -1) return "󰚩"
+    if (name.indexOf("tailscale") !== -1 || name.indexOf("vpn") !== -1) return "󰖂"
+    if (name.indexOf("notification") !== -1) return "󰂞"
+    if (name.indexOf("indicator") !== -1) return "󰀓"
+    if (name.indexOf("update") !== -1 || name.indexOf("sync") !== -1) return "󰚰"
+    if (name.indexOf("system") !== -1) return "󰘳"
+    return ""
+  }
+
   // Bare widget name for display: everything after the last namespace dot.
   function shortName(id) {
     var name = String(id || "")
@@ -1262,6 +1291,8 @@ FormRow {
       var found = widgets[chip.entry.id]
       return found ? found.component : null
     }
+    readonly property string displayGlyph: root.glyphForWidget(chip.entry ? chip.entry.id : "")
+
     readonly property string displayName: {
       var widgets = root.barWidgetRegistry ? root.barWidgetRegistry.widgets : null
       var found = widgets ? widgets[chip.entry.id] : null
@@ -1336,15 +1367,27 @@ FormRow {
       }
     }
 
-    Text {
+    Row {
       id: fallbackLabel
       visible: !chip.widgetHasContent
       anchors.centerIn: parent
-      text: chip.displayName
-      color: root.textDim
-      font.family: Style.font.family
-      font.pixelSize: Style.font.body
-      font.letterSpacing: 0.5
+      spacing: Style.space(3)
+
+      Text {
+        visible: chip.displayGlyph !== ""
+        text: chip.displayGlyph
+        color: root.text
+        font.family: Style.font.family
+        font.pixelSize: Style.font.subtitle
+      }
+
+      Text {
+        text: chip.displayName
+        color: root.textDim
+        font.family: Style.font.family
+        font.pixelSize: Style.font.body
+        font.letterSpacing: 0.5
+      }
     }
 
     MouseArea {
