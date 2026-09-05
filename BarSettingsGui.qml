@@ -408,33 +408,34 @@ Item {
 
   // Callers pass the just-chosen token/image explicitly: reading cfg back
   // immediately after setLogo races QML's lazy binding propagation and
-  // would tint with the previous color.
+  // would tint with the previous color. Each tint lands in its own
+  // per-color cache file — QML Image caches by URL, so rewriting one file
+  // in place would never reload.
   function regenerateTintedLogo(forcedToken, forcedImage) {
     var image = forcedImage !== undefined ? forcedImage : root.logoVal("logoImage", "")
     var token = forcedToken !== undefined ? forcedToken : root.logoVal("logoColor", "")
-    if (image === "" || token === "") {
-      if (root.logoVal("logoImageTinted", "") !== "") root.setLogo("logoImageTinted", null)
-      return
-    }
+    if (image === "") return
     var color = colorForToken(token).toString()
     var home = Quickshell.env("HOME")
     var src = image.indexOf("~/") === 0 ? home + image.substring(1) : image
-    var cache = home + "/.cache/skal-bar/logo.svg"
+    var cache = home + "/.cache/skal-bar/logo." + color.replace("#", "") + ".svg"
     var script = 's/fill="(none|transparent)"/fill="__KEEP__"/g; '
       + 's/fill="[^"]*"/fill="' + color + '"/g; '
       + 's/fill:(none|transparent)/fill:__KEEP__/g; '
       + 's/fill:[^;"}]+/fill:' + color + '/g; '
       + 's/stroke="[^"]*"/stroke="' + color + '"/g; '
       + 's/__KEEP__/none/g'
+    tintProc.pendingPath = "~/.cache/skal-bar/logo." + color.replace("#", "") + ".svg"
     tintProc.command = ["bash", "-c",
-      "mkdir -p '" + home + "/.cache/skal-bar' && sed -E '" + script + "' '" + src + "' > '" + cache + "'"]
+      "mkdir -p '" + home + "/.cache/skal-bar' && rm -f '" + home + "'/.cache/skal-bar/logo*.svg && sed -E '" + script + "' '" + src + "' > '" + cache + "'"]
     tintProc.running = true
   }
 
   Process {
     id: tintProc
+    property string pendingPath: ""
     onExited: function(exitCode) {
-      if (exitCode === 0) root.setLogo("logoImageTinted", "~/.cache/skal-bar/logo.svg")
+      if (exitCode === 0 && pendingPath !== "") root.setLogo("logoImageTinted", pendingPath)
     }
   }
 
