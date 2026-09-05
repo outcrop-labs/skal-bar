@@ -31,6 +31,10 @@ Item {
   property bool opened: false
   property int currentTab: 0
   property string selectedWidget: ""
+  // Hovering a chip shows its full name until a drag starts.
+  property string chipTooltipText: ""
+  property real chipTooltipX: 0
+  property real chipTooltipY: 0
 
   // Chip drag state. The ghost is a grabToImage snapshot of the chip (the
   // same technique the bar uses for widget reordering), so the live widget
@@ -436,6 +440,28 @@ Item {
       borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
 
       MouseArea { anchors.fill: parent; onClicked: {} }
+
+      // Chip name tooltip — clears the moment a drag begins.
+      BorderSurface {
+        visible: root.chipTooltipText !== "" && !root.chipDragging
+        x: Math.max(0, Math.min(root.chipTooltipX - width / 2, card.width - width))
+        y: Math.min(root.chipTooltipY - height - Style.space(4), card.height - height)
+        width: chipTooltipLabel.implicitWidth + Style.space(4)
+        height: chipTooltipLabel.implicitHeight + Style.space(3)
+        radius: Math.min(Style.cornerRadius, Style.space(3))
+        color: Color.background
+        borderSpec: Border.flat(root.textDim, 1)
+        z: 90
+
+        Text {
+          id: chipTooltipLabel
+          anchors.centerIn: parent
+          text: root.chipTooltipText
+          color: root.text
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+        }
+      }
 
       // Ghost overlay for chip drags. Sits above all card content and is
       // input-transparent so it never steals the pointer from the chip
@@ -1382,6 +1408,7 @@ FormRow {
       }
 
       Text {
+        visible: chip.displayGlyph === ""
         text: chip.displayName
         color: root.textDim
         font.family: Style.font.family
@@ -1415,7 +1442,22 @@ FormRow {
         root.selectedWidget = chip.entry.id
       }
 
+      onEntered: updateChipTooltip(mouseX, mouseY)
+      onExited: root.chipTooltipText = ""
+
+      function updateChipTooltip(localX, localY) {
+        if (root.chipDragging) {
+          root.chipTooltipText = ""
+          return
+        }
+        var point = chip.mapToItem(card, localX, localY)
+        root.chipTooltipX = point.x
+        root.chipTooltipY = point.y
+        root.chipTooltipText = chip.displayName
+      }
+
       onPositionChanged: function(mouse) {
+        updateChipTooltip(mouse.x, mouse.y)
         if (chip.isPinned) return
         if (!(mouse.buttons & Qt.LeftButton) || !pressed) return
         var scenePoint = chip.mapToItem(null, mouse.x, mouse.y)

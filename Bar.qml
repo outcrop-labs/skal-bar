@@ -425,12 +425,12 @@ Item {
   // tooltip, in which case theirs wins. Starting a drag clears it (the
   // drag path already hides the tooltip for the dragged item).
   function showWidgetNameTooltip(slot) {
-    var item = slot ? slot.activeItem : null
-    if (!item) return
-    if ("tooltipText" in item && String(item.tooltipText) !== "") return
+    if (!slot) return
+    var item = slot.activeItem
+    if (item && "tooltipText" in item && String(item.tooltipText) !== "") return
     var name = widgetDisplayName(slot.moduleName)
     if (name === "") return
-    showTooltip(item, name)
+    showTooltip(slot, name)
   }
 
   function revealIconFor(region) {
@@ -2101,6 +2101,11 @@ Item {
       return componentLoader.item
     }
     readonly property bool hovered: moduleHover.hovered
+    // The tooltip gate reads `tooltipHovered` on the target; exposing the
+    // slot's own hover makes the name tooltip race-free at pointer entry
+    // (the widget's internal flag updates only after its MouseArea hears
+    // about the hover) and works for non-WidgetButton items too.
+    readonly property bool tooltipHovered: moduleHover.hovered
     readonly property bool dragSource: root.barDragSource === slot
     readonly property bool panelOpen: root.activePopout === slot.activeItem
     // Bartender hiding: entries with "hidden": true|"hover"|"always"
@@ -2138,7 +2143,10 @@ Item {
       id: moduleHover
       onHoveredChanged: {
         if (hovered) root.showWidgetNameTooltip(slot)
-        else root.hideTooltip(slot.activeItem)
+        else {
+          root.hideTooltip(slot)
+          if (slot.activeItem) root.hideTooltip(slot.activeItem)
+        }
       }
     }
 
