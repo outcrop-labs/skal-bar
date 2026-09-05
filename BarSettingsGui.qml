@@ -386,7 +386,7 @@ Item {
     if (token === "muted") return Color.muted
     if (token === "background") return Color.background
     if (/^#[0-9A-Fa-f]{6}$/.test(token)) return token
-    return Color.bar.text
+    return Color.foreground
   }
 
   function logoMode() {
@@ -1099,12 +1099,12 @@ FormRow {
                       layer.enabled: root.logoVal("logoColor", "") !== ""
                     }
 
-                    MultiEffect {
+                    ShaderEffect {
                       anchors.fill: previewLogoBitmap
-                      source: previewLogoBitmap
                       visible: root.logoVal("logoColor", "") !== ""
-                      colorization: 1.0
-                      colorizationColor: root.logoVal("logoColor", "")
+                      property var source: previewLogoBitmap
+                      property color tint: root.resolvedLogoColor()
+                      fragmentShader: "LogoTint.qsb"
                     }
                   }
                 }
@@ -1180,15 +1180,6 @@ FormRow {
               FormRow {
                 label: "Color"
 
-                Rectangle {
-                  width: Style.space(7)
-                  height: Style.space(7)
-                  radius: Math.min(Style.cornerRadius, width / 3)
-                  color: root.resolvedLogoColor()
-                  border.color: root.textDim
-                  border.width: 1
-                }
-
                 Dropdown {
                   id: logoColorDD
                   label: "Theme"
@@ -1200,9 +1191,8 @@ FormRow {
                     return "#custom"
                   }
                   options: [
-                    { value: "", label: "Bar text (default)" },
+                    { value: "", label: "Foreground (default)" },
                     { value: "accent", label: "Accent" },
-                    { value: "foreground", label: "Foreground" },
                     { value: "urgent", label: "Urgent" },
                     { value: "muted", label: "Muted" },
                     { value: "background", label: "Background" },
@@ -1211,6 +1201,16 @@ FormRow {
                   onChanged: function(value) {
                     root.setLogo("logoColor", value === "" || value === "#custom" ? null : value)
                   }
+                }
+
+                Rectangle {
+                  Layout.alignment: Qt.AlignVCenter
+                  width: logoColorDD.rowHeight
+                  height: logoColorDD.rowHeight
+                  radius: Math.min(Style.cornerRadius, height / 4)
+                  color: root.resolvedLogoColor()
+                  border.color: root.textDim
+                  border.width: 1
                 }
               }
 
