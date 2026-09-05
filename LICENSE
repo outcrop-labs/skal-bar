@@ -1,6 +1,8 @@
 MIT License
 
 Copyright (c) 2026 Outcrop Labs
+Copyright (c) David Heinemeier Hansson (bar engine, tray, and widget code
+derived from the Omarchy shell, https://omarchy.org, MIT)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

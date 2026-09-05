@@ -127,6 +127,12 @@ Settings for any cloned menu widget entry. `logoMode` picks the source:
 
 The settings panel's Browse button opens the OS file picker (requires `zenity`), filtered to SVG.
 
+## Credits
+
+Derived from the [Omarchy](https://omarchy.org) shell's bar and tray plugins
+(MIT, © David Heinemeier Hansson) — thanks to the Omarchy contributors for
+the excellent foundation.
+
 ## License
 
-MIT © Outcrop Labs
+MIT © Outcrop Labs. Portions © David Heinemeier Hansson / Omarchy, under MIT.
