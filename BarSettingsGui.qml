@@ -1116,7 +1116,7 @@ FormRow {
                   anchors.fill: parent
                   radius: Math.min(Style.cornerRadius, Style.space(5))
                   color: Color.background
-                  borderSpec: Border.flat(root.textDim, 1)
+                  borderSpec: Border.none()
 
                   readonly property real k: 0.42
                   readonly property color barBg: root.cfgStr("backgroundColor", "") !== ""
@@ -1168,42 +1168,40 @@ FormRow {
                       border.width: root.cfgNum("margin", 0) > 0 ? 1 : 0
                     }
 
-                    Text {
-                      // The logo at true scale, left-aligned at the real edge padding.
+                    Row {
                       anchors.left: parent.left
                       anchors.leftMargin: Style.space(3)
                       anchors.verticalCenter: parent.verticalCenter
-                      visible: !(root.logoMode() === "image" && root.logoVal("logoImage", "") !== "")
-                      text: root.logoVal("logo", "") !== "" ? root.logoVal("logo", "") : "\ue900"
-                      color: root.resolvedLogoColor()
-                      font.family: root.logoVal("logoFont", "") !== "" ? root.logoVal("logoFont", "") : "omarchy"
-                      font.pixelSize: Math.max(6, Math.round(previewStage.k * (Number(root.logoVal("logoSize", 12)) || 12)))
-                    }
+                      spacing: Style.space(4)
 
-                    Image {
-                      anchors.left: parent.left
-                      anchors.leftMargin: Style.space(3)
-                      anchors.verticalCenter: parent.verticalCenter
-                      height: parent.height - Style.space(2)
-                      width: height
-                      visible: root.logoMode() === "image" && root.logoVal("logoImage", "") !== ""
-                      source: root.effectiveLogoSource()
-                      sourceSize: Qt.size(96, 96)
-                      fillMode: Image.PreserveAspectFit
-                      smooth: true
-                      mipmap: true
-                    }
+                      Text {
+                        visible: !(root.logoMode() === "image" && root.logoVal("logoImage", "") !== "")
+                        text: root.logoVal("logo", "") !== "" ? root.logoVal("logo", "") : "\ue900"
+                        color: root.resolvedLogoColor()
+                        font.family: root.logoVal("logoFont", "") !== "" ? root.logoVal("logoFont", "") : "omarchy"
+                        font.pixelSize: Math.max(6, Math.round(previewStage.k * (Number(root.logoVal("logoSize", 12)) || 12)))
+                      }
 
-                    Text {
-                      // Dimmed stand-in widgets for context.
-                      anchors.left: parent.left
-                      anchors.leftMargin: Style.space(12)
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: "󰎤  󰎥  󰎦"
-                      color: Color.bar.text
-                      opacity: 0.35
-                      font.family: Style.font.family
-                      font.pixelSize: parent.height - Style.space(3)
+                      Image {
+                        height: previewBar.height - Style.space(2)
+                        width: height
+                        visible: root.logoMode() === "image" && root.logoVal("logoImage", "") !== ""
+                        source: root.effectiveLogoSource()
+                        sourceSize: Qt.size(96, 96)
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
+                      }
+
+                      Text {
+                        // Dimmed stand-in widgets, flowing after the logo.
+                        visible: !(root.logoMode() === "image" && root.logoVal("logoImage", "") !== "")
+                        text: "󰎤  󰎥  󰎦"
+                        color: Color.bar.text
+                        opacity: 0.35
+                        font.family: Style.font.family
+                        font.pixelSize: previewBar.height - Style.space(3)
+                      }
                     }
 
                     Text {
