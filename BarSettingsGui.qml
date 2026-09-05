@@ -32,6 +32,9 @@ Item {
   property bool opened: false
   property int currentTab: 0
   property string selectedWidget: ""
+  property string pickerError: ""
+  property var pendingPickerArgs: []
+  property bool pickerHidPanel: false
   // Hovering a chip shows its full name until a drag starts.
   property string chipTooltipText: ""
   property real chipTooltipX: 0
@@ -392,14 +395,37 @@ Item {
     })
   }
 
-  // The OS file picker (zenity prints the chosen path on stdout; cancel
-  // prints nothing).
+  // The OS file picker. zenity is a soft dependency: it is checked for
+  // first and a readable error is shown in the panel when missing. The
+  // settings window hides while the picker runs — it is an overlay-layer
+  // surface and would otherwise cover the dialog — and returns after.
+  Process {
+    id: whichZenity
+    command: ["sh", "-c", "command -v zenity >/dev/null 2>&1"]
+    onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.pickerError = "zenity is not installed. Run: sudo pacman -S zenity — or type a path above."
+        return
+      }
+      iconPickerProc.command = root.pendingPickerArgs
+      root.pickerHidPanel = root.opened
+      root.opened = false
+      iconPickerProc.running = true
+    }
+  }
+
   Process {
     id: iconPickerProc
     stdout: SplitParser {
       onRead: function(line) {
         var path = String(line).trim()
         if (path !== "") root.setLogo("logoImage", path)
+      }
+    }
+    onExited: {
+      if (root.pickerHidPanel) {
+        root.pickerHidPanel = false
+        root.opened = true
       }
     }
   }
@@ -1121,6 +1147,16 @@ FormRow {
                 hint: "shown instead of the glyph"
               }
 
+              Text {
+                Layout.fillWidth: true
+                visible: root.pickerError !== ""
+                wrapMode: Text.WordWrap
+                text: root.pickerError
+                color: Color.urgent
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+              }
+
               FormRow {
                 label: "Path"
 
@@ -1144,13 +1180,14 @@ FormRow {
                     if (current.indexOf("~/") === 0) dir = Quickshell.env("HOME") + current.substring(1)
                     else if (current.indexOf("/") === 0) dir = current
                     if (String(dir).slice(-1) !== "/") dir = dir.substring(0, String(dir).lastIndexOf("/") + 1)
-                    iconPickerProc.command = [
+                    root.pendingPickerArgs = [
                       "zenity", "--file-selection",
                       "--title=Pick a logo icon",
                       "--file-filter=Images | *.png *.jpg *.jpeg *.svg *.webp *.gif *.bmp *.ico",
                       "--filename=" + dir
                     ]
-                    iconPickerProc.running = true
+                    root.pickerError = ""
+                    whichZenity.running = true
                   }
                 }
               }
