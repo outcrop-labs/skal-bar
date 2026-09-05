@@ -1,5 +1,6 @@
 import Quickshell
 import Quickshell.Wayland
+import Qt.labs.folderlistmodel
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
@@ -31,6 +32,9 @@ Item {
   property bool opened: false
   property int currentTab: 0
   property string selectedWidget: ""
+  // Icon file picker modal state.
+  property bool iconPickerOpen: false
+  property url iconPickerDir: "file://" + Quickshell.env("HOME") + "/Pictures"
   // Hovering a chip shows its full name until a drag starts.
   property string chipTooltipText: ""
   property real chipTooltipX: 0
@@ -440,6 +444,144 @@ Item {
       borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
 
       MouseArea { anchors.fill: parent; onClicked: {} }
+
+      // Icon file picker modal: folders first, image files only.
+      Item {
+        anchors.fill: parent
+        visible: root.iconPickerOpen
+        z: 200
+
+        Rectangle {
+          anchors.fill: parent
+          color: Color.menu.scrim
+
+          MouseArea {
+            anchors.fill: parent
+            onClicked: root.iconPickerOpen = false
+          }
+        }
+
+        BorderSurface {
+          id: pickerCard
+
+          anchors.centerIn: parent
+          width: parent.width - Style.space(20)
+          height: Math.min(parent.height - Style.space(20), Style.space(60))
+          radius: Math.min(Style.cornerRadius, Style.space(4))
+          color: Color.popups.background
+          borderSpec: Border.flat(root.textDim, 1)
+
+          MouseArea { anchors.fill: parent; onClicked: {} }
+
+          ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: Style.space(6)
+            spacing: Style.space(4)
+
+            RowLayout {
+              Layout.fillWidth: true
+              spacing: Style.space(4)
+
+              Button {
+                text: "󰁁"
+                fontSize: Style.font.body
+                onClicked: {
+                  var parent_ = folderModel.parentFolder
+                  if (parent_ && String(parent_) !== "") root.iconPickerDir = parent_
+                }
+              }
+
+              Text {
+                Layout.fillWidth: true
+                elide: Text.ElideMiddle
+                text: {
+                  var path = String(root.iconPickerDir)
+                  return path.indexOf("file://") === 0 ? path.substring(7) : path
+                }
+                color: root.textDim
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+              }
+
+              Button {
+                text: "✕"
+                fontSize: Style.font.bodySmall
+                onClicked: root.iconPickerOpen = false
+              }
+            }
+
+            ListView {
+              id: pickerList
+
+              Layout.fillWidth: true
+              Layout.fillHeight: true
+              clip: true
+              boundsBehavior: Flickable.StopAtBounds
+
+              model: FolderListModel {
+                id: folderModel
+                folder: root.iconPickerDir
+                showDirsFirst: true
+                showFiles: true
+                showHidden: false
+                nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.svg", "*.webp", "*.gif", "*.bmp", "*.ico"]
+              }
+
+              delegate: MouseArea {
+                id: pickerRow
+
+                required property string fileName
+                required property url fileUrl
+                required property bool fileIsDir
+
+                width: pickerList.width
+                height: Style.space(10)
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  if (pickerRow.fileIsDir) {
+                    root.iconPickerDir = pickerRow.fileUrl
+                  } else {
+                    var path = String(pickerRow.fileUrl)
+                    if (path.indexOf("file://") === 0) path = path.substring(7)
+                    root.setLogo("logoImage", path)
+                    root.iconPickerOpen = false
+                  }
+                }
+
+                Rectangle {
+                  anchors.fill: parent
+                  color: pickerRow.containsMouse
+                    ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.15)
+                    : "transparent"
+                }
+
+                Text {
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(2)
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: pickerRow.fileIsDir ? "󰉋" : "󰏘"
+                  color: pickerRow.fileIsDir ? Color.accent : root.text
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.subtitle
+                }
+
+                Text {
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(10)
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  elide: Text.ElideMiddle
+                  text: pickerRow.fileName
+                  color: root.text
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                }
+              }
+            }
+          }
+        }
+      }
 
       // Chip name tooltip — clears the moment a drag begins.
       BorderSurface {
@@ -975,38 +1117,67 @@ FormRow {
                 visible: root.menuEntryId !== ""
               }
 
-              // Live preview of the configured logo.
+              // Live preview rendered as a mock of the bar itself: the real
+              // bar background, the logo left-aligned at the real edge
+              // padding, ghost widgets hinting at the rest of the bar.
               BorderSurface {
                 visible: root.menuEntryId !== ""
                 Layout.fillWidth: true
                 height: Style.space(22)
-                radius: Math.min(Style.cornerRadius, height / 2)
-                color: Color.background
+                radius: Math.min(Style.cornerRadius, Style.space(4))
+                color: Color.bar.background
                 borderSpec: Border.flat(root.textDim, 1)
 
-                Text {
-                  visible: root.logoVal("logoImage", "") === ""
-                  anchors.centerIn: parent
-                  text: root.logoVal("logo", "") !== "" ? root.logoVal("logo", "") : "\ue900"
-                  color: root.logoVal("logoColor", "") !== "" ? root.logoVal("logoColor", "") : root.text
-                  font.family: root.logoVal("logoFont", "") !== "" ? root.logoVal("logoFont", "") : "omarchy"
-                  font.pixelSize: Number(root.logoVal("logoSize", 12)) || 12
+                Item {
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(8)
+                  anchors.verticalCenter: parent.verticalCenter
+                  height: parent.height
+
+                  Text {
+                    visible: root.logoVal("logoImage", "") === ""
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.logoVal("logo", "") !== "" ? root.logoVal("logo", "") : "\ue900"
+                    color: root.logoVal("logoColor", "") !== "" ? root.logoVal("logoColor", "") : Color.bar.text
+                    font.family: root.logoVal("logoFont", "") !== "" ? root.logoVal("logoFont", "") : "omarchy"
+                    font.pixelSize: Number(root.logoVal("logoSize", 12)) || 12
+                  }
+
+                  Image {
+                    visible: root.logoVal("logoImage", "") !== ""
+                    anchors.verticalCenter: parent.verticalCenter
+                    source: {
+                      var path = root.logoVal("logoImage", "")
+                      if (path === "") return ""
+                      if (path.indexOf("~/") === 0) path = Quickshell.env("HOME") + path.substring(1)
+                      return "file://" + path
+                    }
+                    height: parent.height - Style.space(6)
+                    width: height
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    mipmap: true
+                  }
                 }
 
-                Image {
-                  visible: root.logoVal("logoImage", "") !== ""
-                  anchors.centerIn: parent
-                  source: {
-                    var path = root.logoVal("logoImage", "")
-                    if (path === "") return ""
-                    if (path.indexOf("~/") === 0) path = Quickshell.env("HOME") + path.substring(1)
-                    return "file://" + path
+                Row {
+                  anchors.right: parent.right
+                  anchors.rightMargin: Style.space(8)
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: Style.space(3)
+                  opacity: 0.25
+
+                  Repeater {
+                    model: 3
+
+                    Rectangle {
+                      required property var modelData
+                      width: Style.space(3)
+                      height: Style.space(3)
+                      radius: width / 2
+                      color: Color.bar.text
+                    }
                   }
-                  width: 40
-                  height: 40
-                  fillMode: Image.PreserveAspectFit
-                  smooth: true
-                  mipmap: true
                 }
               }
 
@@ -1083,7 +1254,7 @@ FormRow {
                 label: "Path"
 
                 TextField {
-                  width: Style.space(26)
+                  Layout.fillWidth: true
                   text: root.logoVal("logoImage", "")
                   placeholderText: "~/path/to/logo.png"
                   font.family: Style.font.family
@@ -1091,6 +1262,20 @@ FormRow {
                   color: root.text
                   foreground: root.text
                   onEditingFinished: root.setLogo("logoImage", String(text).trim())
+                }
+
+                Button {
+                  text: "Browse"
+                  fontSize: Style.font.bodySmall
+                  onClicked: {
+                    var current = root.logoVal("logoImage", "")
+                    if (current.indexOf("~/") === 0) {
+                      root.iconPickerDir = "file://" + Quickshell.env("HOME") + current.substring(1)
+                    } else if (current.indexOf("/") === 0) {
+                      root.iconPickerDir = "file://" + current
+                    }
+                    root.iconPickerOpen = true
+                  }
                 }
               }
             }
