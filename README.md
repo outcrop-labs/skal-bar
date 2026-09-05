@@ -31,6 +31,19 @@ o.bind("SUPER + ALT + B", "Bar settings", "omarchy-shell shell toggle skal.bar")
 
 Right-click any blank bar space also opens settings.
 
+## Uninstall
+
+```bash
+omarchy bar use omarchy.bar
+omarchy plugin remove skal.bar --yes
+```
+
+Remove the keybind from `~/.config/hypr/bindings.lua` if added.
+
+## Dependencies
+
+- [zenity](https://gitlab.gnome.org/GNOME/zenity) (optional) — OS file picker for the logo browser: `sudo pacman -S zenity`. Without it, type the SVG path manually.
+
 ## Config
 
 All keys live under `bar` in `~/.config/omarchy/shell.json`. Hot-reloads on save.
