@@ -378,6 +378,24 @@ Item {
 
   // Theme tokens for the logo color, resolved live so the preview follows
   // theme changes; literal #rrggbb still honored for manual control.
+  // Glyph-capable font families for the logo picker: the omarchy icon font,
+  // every installed Nerd/symbol family, and the system monospace for text
+  // logos. Anything else could not render the icon glyphs at all.
+  readonly property var logoFontOptions: {
+    var out = [{ value: "", label: "omarchy (default)" }]
+    var seen = ({ omarchy: true })
+    var families = Qt.fontFamilies()
+    for (var i = 0; i < families.length; i++) {
+      var family = families[i]
+      if (seen[family]) continue
+      if (/Nerd|Symbol/i.test(family) || family === Style.font.family) {
+        seen[family] = true
+        out.push({ value: family, label: family })
+      }
+    }
+    return out
+  }
+
   function colorForToken(token) {
     if (token === "accent") return Color.accent
     if (token === "foreground") return Color.foreground
@@ -1241,15 +1259,15 @@ FormRow {
               FormRow {
                 label: "Font"
 
-                TextField {
-                  width: Style.space(26)
-                  text: root.logoVal("logoFont", "")
-                  placeholderText: "omarchy"
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.body
-                  color: root.text
+                SearchableDropdown {
+                  id: logoFontDD
+                  placeholderText: "Search fonts…"
                   foreground: root.text
-                  onEditingFinished: root.setLogo("logoFont", String(text).trim())
+                  popupBorder: Color.popups.border
+                  value: root.logoVal("logoFont", "")
+                  options: root.logoFontOptions
+                  onChanged: function(value) { root.setLogo("logoFont", value === "" ? null : value) }
+                  Binding { target: logoFontDD; property: "value"; value: root.logoVal("logoFont", "") }
                 }
               }
 
