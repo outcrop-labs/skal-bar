@@ -1349,7 +1349,7 @@ FormRow {
 
     width: (widgetHasContent && chipLoader.item
       ? chipLoader.item.implicitWidth * chip.chipScale
-      : fallbackLabel.implicitWidth) + Style.space(10)
+      : fallbackLabel.implicitWidth + Style.space(9)) + Style.space(10)
     height: Style.space(30)
 
     Rectangle {
