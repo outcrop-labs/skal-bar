@@ -99,11 +99,18 @@ CLI: `omarchy bar set <widget-id> <key> <value>`, e.g. `omarchy bar set omarchy.
 
 ### Logo
 
-Settings for any cloned menu widget entry: `logo`, `logoFont`, `logoSize`, `logoColor`, `logoImage`.
+Settings for any cloned menu widget entry. `logoMode` picks the source:
+
+| Value | Behavior |
+|---|---|
+| `"glyph"` | text/icon glyph (`logo`, `logoFont`, `logoSize`, `logoColor`) |
+| `"image"` | SVG image (`logoImage`, tinted by `logoColor` when set) |
 
 ```json
-{ "id": "your.menu", "logo": "󰣇", "logoFont": "Symbols Nerd Font" }
+{ "id": "your.menu", "logoMode": "image", "logoImage": "~/Pictures/logo.svg", "logoColor": "#C1C497" }
 ```
+
+The settings panel's Browse button opens the OS file picker (requires `zenity`), filtered to SVG.
 
 ## License
 

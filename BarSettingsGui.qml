@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
@@ -373,6 +374,10 @@ Item {
     var entry = root.menuEntry
     var value = entry ? entry[key] : undefined
     return value === undefined || value === null ? fallback : String(value)
+  }
+
+  function logoMode() {
+    return root.logoVal("logoMode", "glyph") === "image" ? "image" : "glyph"
   }
 
   function setLogo(key, value) {
@@ -1009,6 +1014,24 @@ FormRow {
                 font.pixelSize: Style.font.caption
               }
 
+              FormRow {
+                label: "Source"
+
+                Dropdown {
+                  id: logoModeDD
+                  label: "Logo"
+                  showLabel: true
+                  foreground: root.text
+                  value: root.logoMode()
+                  options: [
+                    { value: "glyph", label: "Glyph" },
+                    { value: "image", label: "Image (SVG)" }
+                  ]
+                  onChanged: function(value) { root.setLogo("logoMode", value === "glyph" ? null : value) }
+                  Binding { target: logoModeDD; property: "value"; value: root.logoMode() }
+                }
+              }
+
               SectionHeader {
                 title: "PREVIEW"
                 visible: root.menuEntryId !== ""
@@ -1032,7 +1055,7 @@ FormRow {
                   height: parent.height
 
                   Text {
-                    visible: root.logoVal("logoImage", "") === ""
+                    visible: !(root.logoMode() === "image" && root.logoVal("logoImage", "") !== "")
                     anchors.verticalCenter: parent.verticalCenter
                     text: root.logoVal("logo", "") !== "" ? root.logoVal("logo", "") : "\ue900"
                     color: root.logoVal("logoColor", "") !== "" ? root.logoVal("logoColor", "") : Color.bar.text
@@ -1040,20 +1063,36 @@ FormRow {
                     font.pixelSize: Number(root.logoVal("logoSize", 12)) || 12
                   }
 
-                  Image {
-                    visible: root.logoVal("logoImage", "") !== ""
+                  Item {
+                    visible: root.logoMode() === "image" && root.logoVal("logoImage", "") !== ""
                     anchors.verticalCenter: parent.verticalCenter
-                    source: {
-                      var path = root.logoVal("logoImage", "")
-                      if (path === "") return ""
-                      if (path.indexOf("~/") === 0) path = Quickshell.env("HOME") + path.substring(1)
-                      return "file://" + path
-                    }
                     height: parent.height - Style.space(6)
                     width: height
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
-                    mipmap: true
+
+                    Image {
+                      id: previewLogoBitmap
+                      anchors.fill: parent
+                      source: {
+                        var path = root.logoVal("logoImage", "")
+                        if (path === "") return ""
+                        if (path.indexOf("~/") === 0) path = Quickshell.env("HOME") + path.substring(1)
+                        return "file://" + path
+                      }
+                      sourceSize: Qt.size(96, 96)
+                      fillMode: Image.PreserveAspectFit
+                      smooth: true
+                      mipmap: true
+                      visible: root.logoVal("logoColor", "") === ""
+                      layer.enabled: root.logoVal("logoColor", "") !== ""
+                    }
+
+                    MultiEffect {
+                      anchors.fill: previewLogoBitmap
+                      source: previewLogoBitmap
+                      visible: root.logoVal("logoColor", "") !== ""
+                      colorization: 1.0
+                      colorizationColor: root.logoVal("logoColor", "")
+                    }
                   }
                 }
 
@@ -1080,6 +1119,7 @@ FormRow {
 
               SectionHeader {
                 title: "GLYPH"
+                visible: root.logoMode() !== "image"
               }
 
               FormRow {
@@ -1145,6 +1185,7 @@ FormRow {
               SectionHeader {
                 title: "IMAGE"
                 hint: "shown instead of the glyph"
+                visible: root.logoMode() === "image"
               }
 
               Text {
@@ -1183,7 +1224,7 @@ FormRow {
                     root.pendingPickerArgs = [
                       "zenity", "--file-selection",
                       "--title=Pick a logo icon",
-                      "--file-filter=Images | *.png *.jpg *.jpeg *.svg *.webp *.gif *.bmp *.ico",
+                      "--file-filter=SVG icons | *.svg",
                       "--filename=" + dir
                     ]
                     root.pickerError = ""
