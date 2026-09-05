@@ -1,6 +1,6 @@
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
-import Qt.labs.folderlistmodel
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
@@ -32,9 +32,6 @@ Item {
   property bool opened: false
   property int currentTab: 0
   property string selectedWidget: ""
-  // Icon file picker modal state.
-  property bool iconPickerOpen: false
-  property url iconPickerDir: "file://" + Quickshell.env("HOME") + "/Pictures"
   // Hovering a chip shows its full name until a drag starts.
   property string chipTooltipText: ""
   property real chipTooltipX: 0
@@ -395,6 +392,18 @@ Item {
     })
   }
 
+  // The OS file picker (zenity prints the chosen path on stdout; cancel
+  // prints nothing).
+  Process {
+    id: iconPickerProc
+    stdout: SplitParser {
+      onRead: function(line) {
+        var path = String(line).trim()
+        if (path !== "") root.setLogo("logoImage", path)
+      }
+    }
+  }
+
   function resetAppearance() {
     mutate(function(config) {
       var bar = root.barObj(config)
@@ -444,144 +453,6 @@ Item {
       borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
 
       MouseArea { anchors.fill: parent; onClicked: {} }
-
-      // Icon file picker modal: folders first, image files only.
-      Item {
-        anchors.fill: parent
-        visible: root.iconPickerOpen
-        z: 200
-
-        Rectangle {
-          anchors.fill: parent
-          color: Color.menu.scrim
-
-          MouseArea {
-            anchors.fill: parent
-            onClicked: root.iconPickerOpen = false
-          }
-        }
-
-        BorderSurface {
-          id: pickerCard
-
-          anchors.centerIn: parent
-          width: parent.width - Style.space(20)
-          height: Math.min(parent.height - Style.space(20), Style.space(60))
-          radius: Math.min(Style.cornerRadius, Style.space(4))
-          color: Color.popups.background
-          borderSpec: Border.flat(root.textDim, 1)
-
-          MouseArea { anchors.fill: parent; onClicked: {} }
-
-          ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: Style.space(6)
-            spacing: Style.space(4)
-
-            RowLayout {
-              Layout.fillWidth: true
-              spacing: Style.space(4)
-
-              Button {
-                text: "󰁁"
-                fontSize: Style.font.body
-                onClicked: {
-                  var parent_ = folderModel.parentFolder
-                  if (parent_ && String(parent_) !== "") root.iconPickerDir = parent_
-                }
-              }
-
-              Text {
-                Layout.fillWidth: true
-                elide: Text.ElideMiddle
-                text: {
-                  var path = String(root.iconPickerDir)
-                  return path.indexOf("file://") === 0 ? path.substring(7) : path
-                }
-                color: root.textDim
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-              }
-
-              Button {
-                text: "✕"
-                fontSize: Style.font.bodySmall
-                onClicked: root.iconPickerOpen = false
-              }
-            }
-
-            ListView {
-              id: pickerList
-
-              Layout.fillWidth: true
-              Layout.fillHeight: true
-              clip: true
-              boundsBehavior: Flickable.StopAtBounds
-
-              model: FolderListModel {
-                id: folderModel
-                folder: root.iconPickerDir
-                showDirsFirst: true
-                showFiles: true
-                showHidden: false
-                nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.svg", "*.webp", "*.gif", "*.bmp", "*.ico"]
-              }
-
-              delegate: MouseArea {
-                id: pickerRow
-
-                required property string fileName
-                required property url fileUrl
-                required property bool fileIsDir
-
-                width: pickerList.width
-                height: Style.space(10)
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                  if (pickerRow.fileIsDir) {
-                    root.iconPickerDir = pickerRow.fileUrl
-                  } else {
-                    var path = String(pickerRow.fileUrl)
-                    if (path.indexOf("file://") === 0) path = path.substring(7)
-                    root.setLogo("logoImage", path)
-                    root.iconPickerOpen = false
-                  }
-                }
-
-                Rectangle {
-                  anchors.fill: parent
-                  color: pickerRow.containsMouse
-                    ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.15)
-                    : "transparent"
-                }
-
-                Text {
-                  anchors.left: parent.left
-                  anchors.leftMargin: Style.space(2)
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: pickerRow.fileIsDir ? "󰉋" : "󰏘"
-                  color: pickerRow.fileIsDir ? Color.accent : root.text
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.subtitle
-                }
-
-                Text {
-                  anchors.left: parent.left
-                  anchors.leftMargin: Style.space(10)
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  elide: Text.ElideMiddle
-                  text: pickerRow.fileName
-                  color: root.text
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.body
-                }
-              }
-            }
-          }
-        }
-      }
 
       // Chip name tooltip — clears the moment a drag begins.
       BorderSurface {
@@ -1269,12 +1140,17 @@ FormRow {
                   fontSize: Style.font.bodySmall
                   onClicked: {
                     var current = root.logoVal("logoImage", "")
-                    if (current.indexOf("~/") === 0) {
-                      root.iconPickerDir = "file://" + Quickshell.env("HOME") + current.substring(1)
-                    } else if (current.indexOf("/") === 0) {
-                      root.iconPickerDir = "file://" + current
-                    }
-                    root.iconPickerOpen = true
+                    var dir = Quickshell.env("HOME") + "/Pictures/"
+                    if (current.indexOf("~/") === 0) dir = Quickshell.env("HOME") + current.substring(1)
+                    else if (current.indexOf("/") === 0) dir = current
+                    if (String(dir).slice(-1) !== "/") dir = dir.substring(0, String(dir).lastIndexOf("/") + 1)
+                    iconPickerProc.command = [
+                      "zenity", "--file-selection",
+                      "--title=Pick a logo icon",
+                      "--file-filter=Images | *.png *.jpg *.jpeg *.svg *.webp *.gif *.bmp *.ico",
+                      "--filename=" + dir
+                    ]
+                    iconPickerProc.running = true
                   }
                 }
               }
