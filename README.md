@@ -60,6 +60,24 @@ All keys live under `bar` in `~/.config/omarchy/shell.json`. Hot-reloads on save
 }
 ```
 
+### Appearance keys
+
+| Key | Default | What it does |
+|---|---|---|
+| `position` | `"top"` | `top` / `bottom` / `left` / `right` |
+| `height` | `0` | Bar thickness in px (font-scaled). `0` = theme size |
+| `margin` | `0` | `>0` floats the bar off the screen edge |
+| `radius` | `0` | Corner radius in px |
+| `backgroundColor` | `""` | `#rrggbb` override. Empty = theme |
+| `backgroundOpacity` | `1` | `0..1` background alpha |
+| `transparent` | `false` | Removes the background entirely (also: double-click blank center space) |
+| `widgetSpacing` | `0` | Gap in px between widgets |
+| `edgePadding` | theme | Padding at the outer ends of left/right sections |
+| `centerAnchor` | `"omarchy.clock"` | Pins one center module to the exact center; `""` centers the group |
+| `traySection` | `"right"` | `left` / `right` / `none` |
+
+CLI: `omarchy bar set <widget-id> <key> <value>`, e.g. `omarchy bar set omarchy.clock format HH:mm`.
+
 ### Widget hidden states
 
 | Value | Behavior |
