@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "skal.bar",
+  "name": "Sk\u00e5l Bar",
+  "version": "1.0.0",
+  "author": "Omarchy",
+  "description": "Omarchy status bar with Bartender-style hidden widget drawers, Noctalia-style appearance customization, a native system tray, and a settings GUI",
+  "kinds": [
+    "bar",
+    "panel"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "bar": "Bar.qml",
+    "panel": "BarSettingsGui.qml"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.bar"
+  }
+}
