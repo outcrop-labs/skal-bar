@@ -381,14 +381,30 @@ Item {
   // Glyph-capable font families for the logo picker: the omarchy icon font,
   // every installed Nerd/symbol family, and the system monospace for text
   // logos. Anything else could not render the icon glyphs at all.
+  property var monoFamilies: []
+
+  Process {
+    command: ["sh", "-c", "fc-list :spacing=mono family | sed 's/,.*//' | sort -u"]
+    running: true
+    stdout: SplitParser {
+      onRead: function(line) {
+        var family = String(line).trim()
+        if (family === "" || /emoji|signwriting/i.test(family)) return
+        if (root.monoFamilies.indexOf(family) !== -1) return
+        root.monoFamilies = root.monoFamilies.concat([family])
+      }
+    }
+  }
+
   readonly property var logoFontOptions: {
     var out = [{ value: "", label: "omarchy (default)" }]
     var seen = ({ omarchy: true })
     var families = Qt.fontFamilies()
-    for (var i = 0; i < families.length; i++) {
-      var family = families[i]
+    var all = families.concat(root.monoFamilies)
+    for (var i = 0; i < all.length; i++) {
+      var family = all[i]
       if (seen[family]) continue
-      if (/Nerd|Symbol/i.test(family) || family === Style.font.family) {
+      if (/Nerd|Symbol/i.test(family) || family === Style.font.family || root.monoFamilies.indexOf(family) !== -1) {
         seen[family] = true
         out.push({ value: family, label: family })
       }
@@ -1155,6 +1171,8 @@ FormRow {
                       color: root.resolvedLogoColor()
                       font.family: root.logoVal("logoFont", "") !== "" ? root.logoVal("logoFont", "") : "omarchy"
                       font.pixelSize: Style.space(15)
+                      font.bold: root.logoVal("logoWeight", "normal") === "bold"
+                      font.italic: root.logoVal("logoStyle", "normal") === "italic"
                     }
 
                     Image {
@@ -1198,6 +1216,8 @@ FormRow {
                         color: root.resolvedLogoColor()
                         font.family: root.logoVal("logoFont", "") !== "" ? root.logoVal("logoFont", "") : "omarchy"
                         font.pixelSize: Math.max(6, Math.round(previewStage.k * (Number(root.logoVal("logoSize", 12)) || 12)))
+                        font.bold: root.logoVal("logoWeight", "normal") === "bold"
+                        font.italic: root.logoVal("logoStyle", "normal") === "italic"
                       }
 
                       Image {
@@ -1268,6 +1288,36 @@ FormRow {
                   options: root.logoFontOptions
                   onChanged: function(value) { root.setLogo("logoFont", value === "" ? null : value) }
                   Binding { target: logoFontDD; property: "value"; value: root.logoVal("logoFont", "") }
+                }
+              }
+
+              FormRow {
+                label: "Weight"
+
+                Dropdown {
+                  id: logoWeightDD
+                  showLabel: false
+                  foreground: root.text
+                  value: root.logoVal("logoWeight", "normal")
+                  options: [
+                    { value: "normal", label: "Normal" },
+                    { value: "bold", label: "Bold" }
+                  ]
+                  onChanged: function(value) { root.setLogo("logoWeight", value === "normal" ? null : value) }
+                  Binding { target: logoWeightDD; property: "value"; value: root.logoVal("logoWeight", "normal") }
+                }
+
+                Dropdown {
+                  id: logoStyleDD
+                  showLabel: false
+                  foreground: root.text
+                  value: root.logoVal("logoStyle", "normal")
+                  options: [
+                    { value: "normal", label: "Upright" },
+                    { value: "italic", label: "Italic" }
+                  ]
+                  onChanged: function(value) { root.setLogo("logoStyle", value === "normal" ? null : value) }
+                  Binding { target: logoStyleDD; property: "value"; value: root.logoVal("logoStyle", "normal") }
                 }
               }
 
