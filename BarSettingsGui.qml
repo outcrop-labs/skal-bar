@@ -396,7 +396,7 @@ Item {
   // the SVG (fills rewritten, cached) is generated at pick time.
   function effectiveLogoSource() {
     var tinted = root.logoVal("logoImageTinted", "")
-    if (root.logoVal("logoColor", "") !== "" && tinted !== "") {
+    if (tinted !== "") {
       if (tinted.indexOf("~/") === 0) tinted = Quickshell.env("HOME") + tinted.substring(1)
       return "file://" + tinted
     }
