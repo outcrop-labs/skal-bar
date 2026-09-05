@@ -1095,14 +1095,22 @@ FormRow {
                       fillMode: Image.PreserveAspectFit
                       smooth: true
                       mipmap: true
-                      visible: root.logoVal("logoColor", "") === ""
-                      layer.enabled: root.logoVal("logoColor", "") !== ""
+                      visible: true
+                    }
+
+                    ShaderEffectSource {
+                      id: previewLogoSource
+                      anchors.fill: previewLogoBitmap
+                      sourceItem: previewLogoBitmap
+                      hideSource: root.logoVal("logoColor", "") !== ""
+                      visible: root.logoVal("logoColor", "") !== ""
+                      live: true
                     }
 
                     ShaderEffect {
                       anchors.fill: previewLogoBitmap
                       visible: root.logoVal("logoColor", "") !== ""
-                      property var source: previewLogoBitmap
+                      property var source: previewLogoSource
                       property color tint: root.resolvedLogoColor()
                       fragmentShader: "LogoTint.qsb"
                     }
@@ -1205,8 +1213,8 @@ FormRow {
 
                 Rectangle {
                   Layout.alignment: Qt.AlignVCenter
-                  width: logoColorDD.rowHeight
-                  height: logoColorDD.rowHeight
+                  width: logoColorDD.implicitHeight
+                  height: logoColorDD.implicitHeight
                   radius: Math.min(Style.cornerRadius, height / 4)
                   color: root.resolvedLogoColor()
                   border.color: root.textDim
