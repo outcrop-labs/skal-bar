@@ -1102,45 +1102,119 @@ FormRow {
                 visible: root.menuEntryId !== ""
               }
 
-              // Live preview rendered as a mock of the bar itself: the real
-              // bar background, the logo left-aligned at the real edge
-              // padding, ghost widgets hinting at the rest of the bar.
-              BorderSurface {
+              // Two-part preview: a hero rendering large enough to judge the
+              // mark, above a to-scale mini of the bar itself — backdrop,
+              // float margin, radius, and background all follow the real
+              // bar settings, with dimmed stand-in widgets for context.
+              Item {
                 visible: root.menuEntryId !== ""
                 Layout.fillWidth: true
-                height: Style.space(22)
-                radius: Math.min(Style.cornerRadius, Style.space(4))
-                color: Color.bar.background
-                borderSpec: Border.flat(root.textDim, 1)
+                implicitHeight: Style.space(72)
 
-                Item {
-                  anchors.left: parent.left
-                  anchors.leftMargin: Style.space(8)
-                  anchors.verticalCenter: parent.verticalCenter
-                  height: parent.height
+                BorderSurface {
+                  id: previewStage
+                  anchors.fill: parent
+                  radius: Math.min(Style.cornerRadius, Style.space(5))
+                  color: Color.background
+                  borderSpec: Border.flat(root.textDim, 1)
 
-                  Text {
-                    visible: !(root.logoMode() === "image" && root.logoVal("logoImage", "") !== "")
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.logoVal("logo", "") !== "" ? root.logoVal("logo", "") : "\ue900"
-                    color: root.resolvedLogoColor()
-                    font.family: root.logoVal("logoFont", "") !== "" ? root.logoVal("logoFont", "") : "omarchy"
-                    font.pixelSize: Number(root.logoVal("logoSize", 12)) || 12
-                  }
+                  readonly property real k: 0.42
+                  readonly property color barBg: root.cfgStr("backgroundColor", "") !== ""
+                    ? root.cfgStr("backgroundColor", "") : Color.bar.background
 
+                  // Hero: the mark itself, large.
                   Item {
-                    visible: root.logoMode() === "image" && root.logoVal("logoImage", "") !== ""
-                    anchors.verticalCenter: parent.verticalCenter
-                    height: parent.height - Style.space(6)
-                    width: height
+                    anchors.top: parent.top
+                    anchors.topMargin: Style.space(8)
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Style.space(30)
+                    height: Style.space(30)
+
+                    Text {
+                      visible: !(root.logoMode() === "image" && root.logoVal("logoImage", "") !== "")
+                      anchors.centerIn: parent
+                      text: root.logoVal("logo", "") !== "" ? root.logoVal("logo", "") : "\ue900"
+                      color: root.resolvedLogoColor()
+                      font.family: root.logoVal("logoFont", "") !== "" ? root.logoVal("logoFont", "") : "omarchy"
+                      font.pixelSize: Style.space(15)
+                    }
 
                     Image {
+                      visible: root.logoMode() === "image" && root.logoVal("logoImage", "") !== ""
                       anchors.fill: parent
+                      anchors.margins: Style.space(2)
+                      source: root.effectiveLogoSource()
+                      sourceSize: Qt.size(192, 192)
+                      fillMode: Image.PreserveAspectFit
+                      smooth: true
+                      mipmap: true
+                    }
+                  }
+
+                  // Mini bar at true proportions.
+                  Item {
+                    id: previewBar
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: Style.space(6)
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: parent.width - Style.space(8) - 2 * Math.round(previewStage.k * root.cfgNum("margin", 0))
+                    height: Math.max(Style.space(9), Math.round(previewStage.k * (root.cfgNum("height", 0) > 0 ? root.cfgNum("height", 0) : 26)))
+
+                    Rectangle {
+                      anchors.fill: parent
+                      radius: Math.min(Math.round(previewStage.k * root.cfgNum("radius", 0)), height / 2)
+                      color: previewStage.barBg
+                      border.color: root.cfgNum("margin", 0) > 0 ? Qt.rgba(root.textDim.r, root.textDim.g, root.textDim.b, 0.4) : "transparent"
+                      border.width: root.cfgNum("margin", 0) > 0 ? 1 : 0
+                    }
+
+                    Text {
+                      // The logo at true scale, left-aligned at the real edge padding.
+                      anchors.left: parent.left
+                      anchors.leftMargin: Style.space(3)
+                      anchors.verticalCenter: parent.verticalCenter
+                      visible: !(root.logoMode() === "image" && root.logoVal("logoImage", "") !== "")
+                      text: root.logoVal("logo", "") !== "" ? root.logoVal("logo", "") : "\ue900"
+                      color: root.resolvedLogoColor()
+                      font.family: root.logoVal("logoFont", "") !== "" ? root.logoVal("logoFont", "") : "omarchy"
+                      font.pixelSize: Math.max(6, Math.round(previewStage.k * (Number(root.logoVal("logoSize", 12)) || 12)))
+                    }
+
+                    Image {
+                      anchors.left: parent.left
+                      anchors.leftMargin: Style.space(3)
+                      anchors.verticalCenter: parent.verticalCenter
+                      height: parent.height - Style.space(2)
+                      width: height
+                      visible: root.logoMode() === "image" && root.logoVal("logoImage", "") !== ""
                       source: root.effectiveLogoSource()
                       sourceSize: Qt.size(96, 96)
                       fillMode: Image.PreserveAspectFit
                       smooth: true
                       mipmap: true
+                    }
+
+                    Text {
+                      // Dimmed stand-in widgets for context.
+                      anchors.left: parent.left
+                      anchors.leftMargin: Style.space(12)
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: "󰎤  󰎥  󰎦"
+                      color: Color.bar.text
+                      opacity: 0.35
+                      font.family: Style.font.family
+                      font.pixelSize: parent.height - Style.space(3)
+                    }
+
+                    Text {
+                      anchors.right: parent.right
+                      anchors.rightMargin: Style.space(3)
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: "󰕾  󰖩  󰁹   14:32"
+                      color: Color.bar.text
+                      opacity: 0.35
+                      font.family: Style.font.family
+                      font.pixelSize: parent.height - Style.space(3)
                     }
                   }
                 }
@@ -1260,13 +1334,12 @@ FormRow {
                   foreground: root.text
                   value: {
                     var token = root.logoVal("logoColor", "")
-                    if (token === "" || token === "accent" || token === "foreground" || token === "urgent" || token === "muted" || token === "background") return token
+                    if (token === "" || token === "accent" || token === "foreground" || token === "muted" || token === "background") return token
                     return "#custom"
                   }
                   options: [
                     { value: "", label: "Foreground (default)" },
                     { value: "accent", label: "Accent" },
-                    { value: "urgent", label: "Urgent" },
                     { value: "muted", label: "Muted" },
                     { value: "background", label: "Background" },
                     { value: "#custom", label: "Custom (#hex)" }
