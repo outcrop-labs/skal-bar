@@ -376,6 +376,19 @@ Item {
     return value === undefined || value === null ? fallback : String(value)
   }
 
+  // Theme tokens for the logo color, resolved live so the preview follows
+  // theme changes; literal #rrggbb still honored for manual control.
+  function resolvedLogoColor() {
+    var token = root.logoVal("logoColor", "")
+    if (token === "accent") return Color.accent
+    if (token === "foreground") return Color.foreground
+    if (token === "urgent") return Color.urgent
+    if (token === "muted") return Color.muted
+    if (token === "background") return Color.background
+    if (/^#[0-9A-Fa-f]{6}$/.test(token)) return token
+    return Color.bar.text
+  }
+
   function logoMode() {
     return root.logoVal("logoMode", "glyph") === "image" ? "image" : "glyph"
   }
@@ -1058,7 +1071,7 @@ FormRow {
                     visible: !(root.logoMode() === "image" && root.logoVal("logoImage", "") !== "")
                     anchors.verticalCenter: parent.verticalCenter
                     text: root.logoVal("logo", "") !== "" ? root.logoVal("logo", "") : "\ue900"
-                    color: root.logoVal("logoColor", "") !== "" ? root.logoVal("logoColor", "") : Color.bar.text
+                    color: root.resolvedLogoColor()
                     font.family: root.logoVal("logoFont", "") !== "" ? root.logoVal("logoFont", "") : "omarchy"
                     font.pixelSize: Number(root.logoVal("logoSize", 12)) || 12
                   }
@@ -1167,17 +1180,36 @@ FormRow {
               FormRow {
                 label: "Color"
 
-                TextField {
-                  width: Style.space(26)
-                  text: root.logoVal("logoColor", "")
-                  placeholderText: "bar text"
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.body
-                  color: root.text
+                Rectangle {
+                  width: Style.space(7)
+                  height: Style.space(7)
+                  radius: Math.min(Style.cornerRadius, width / 3)
+                  color: root.resolvedLogoColor()
+                  border.color: root.textDim
+                  border.width: 1
+                }
+
+                Dropdown {
+                  id: logoColorDD
+                  label: "Theme"
+                  showLabel: true
                   foreground: root.text
-                  onEditingFinished: {
-                    var value = String(text).trim()
-                    root.setLogo("logoColor", /^#[0-9A-Fa-f]{6}$/.test(value) ? value : null)
+                  value: {
+                    var token = root.logoVal("logoColor", "")
+                    if (token === "" || token === "accent" || token === "foreground" || token === "urgent" || token === "muted" || token === "background") return token
+                    return "#custom"
+                  }
+                  options: [
+                    { value: "", label: "Bar text (default)" },
+                    { value: "accent", label: "Accent" },
+                    { value: "foreground", label: "Foreground" },
+                    { value: "urgent", label: "Urgent" },
+                    { value: "muted", label: "Muted" },
+                    { value: "background", label: "Background" },
+                    { value: "#custom", label: "Custom (#hex)" }
+                  ]
+                  onChanged: function(value) {
+                    root.setLogo("logoColor", value === "" || value === "#custom" ? null : value)
                   }
                 }
               }

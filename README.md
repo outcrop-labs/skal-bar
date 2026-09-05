@@ -106,6 +106,8 @@ Settings for any cloned menu widget entry. `logoMode` picks the source:
 | `"glyph"` | text/icon glyph (`logo`, `logoFont`, `logoSize`, `logoColor`) |
 | `"image"` | SVG image (`logoImage`, tinted by `logoColor` when set) |
 
+`logoColor` takes theme tokens (`accent`, `foreground`, `urgent`, `muted`, `background`) resolved live against the active theme, or a literal `#rrggbb`.
+
 ```json
 { "id": "your.menu", "logoMode": "image", "logoImage": "~/Pictures/logo.svg", "logoColor": "#C1C497" }
 ```
