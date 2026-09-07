@@ -7,12 +7,58 @@
   "description": "Omarchy status bar with Bartender-style hidden widget drawers, Noctalia-style appearance customization, a native system tray, and a settings GUI",
   "kinds": [
     "bar",
-    "panel"
+    "panel",
+    "bar-widget"
   ],
   "keepLoaded": true,
   "entryPoints": {
     "bar": "Bar.qml",
-    "panel": "BarSettingsGui.qml"
+    "panel": "BarSettingsGui.qml",
+    "barWidget": "MenuWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Skål menu",
+    "description": "Logo launcher with the quick action panel",
+    "category": "Compositor",
+    "allowMultiple": false,
+    "schema": [
+      {
+        "key": "logo",
+        "type": "string",
+        "label": "Logo",
+        "defaultValue": "",
+        "description": "Text or icon glyph shown in the bar (e.g. 󰣇, jon). Empty = default Omarchy mark."
+      },
+      {
+        "key": "logoFont",
+        "type": "string",
+        "label": "Logo font family",
+        "defaultValue": "omarchy",
+        "description": "Font family for the logo glyph (e.g. Symbols Nerd Font, monospace)."
+      },
+      {
+        "key": "logoImage",
+        "type": "path",
+        "label": "Logo image",
+        "defaultValue": "",
+        "description": "Image file shown instead of text (~/.config/omarchy/logo.png)."
+      },
+      {
+        "key": "logoColor",
+        "type": "string",
+        "label": "Logo color",
+        "defaultValue": "",
+        "description": "Hex color override for the logo (#rrggbb), or a theme token. Empty = bar foreground."
+      },
+      {
+        "key": "logoSize",
+        "type": "integer",
+        "label": "Logo size (px)",
+        "min": 8,
+        "max": 48,
+        "defaultValue": 12
+      }
+    ]
   },
   "omarchy": {
     "clonedFrom": "omarchy.bar"

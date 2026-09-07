@@ -350,7 +350,9 @@ Item {
   readonly property string menuEntryId: {
     var entries = root.layoutEntries
     for (var i = 0; i < entries.length; i++) {
-      if (entries[i].id === "omarchy.menu" || /\.menu$/.test(entries[i].id)) return entries[i].id
+      // The menu widget ships inside this plugin, so its layout id is the
+      // plugin's own id — "skal.bar" — alongside stock/cloned *.menu ids.
+      if (entries[i].id === "omarchy.menu" || entries[i].id === "skal.bar" || /\.menu$/.test(entries[i].id)) return entries[i].id
     }
     return ""
   }

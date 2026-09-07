@@ -47,11 +47,8 @@ Requires [Omarchy](https://omarchy.org).
 
 ```bash
 omarchy plugin add https://github.com/outcrop-labs/skal-bar.git --enable --yes
-omarchy plugin add https://github.com/outcrop-labs/skal-menu.git --enable --yes
 omarchy bar use skal.bar
 ```
-
-`skal-menu` is the companion menu widget — it provides the logo and the quick action panel on the menu trigger.
 
 Optional keybind in `~/.config/hypr/bindings.lua`:
 
@@ -66,7 +63,6 @@ Right-click any blank bar space also opens settings.
 ```bash
 omarchy bar use omarchy.bar
 omarchy plugin remove skal.bar --yes
-omarchy plugin remove skal.menu --yes
 ```
 
 Remove the keybind from `~/.config/hypr/bindings.lua` if added.
@@ -173,10 +169,10 @@ Four tiles: **Silence Notifications** (DND), **Night Light**, **Stay Awake**, **
 Keyboard: arrows move between tiles (sideways steps one, vertical steps a row), `Enter`/`Space` activates, `Esc` closes. Optional keybind in `~/.config/hypr/bindings.lua`:
 
 ```lua
-o.bind("SUPER + ALT + Q", "Quick actions", "omarchy-shell shell toggle skal.menu.controls")
+o.bind("SUPER + ALT + Q", "Quick actions", "omarchy-shell -q skal.bar.controls toggle")
 ```
 
-The panel and the logo settings live in the companion menu widget ([skal-menu](https://github.com/outcrop-labs/skal-menu)), a clone of `omarchy.menu`.
+The menu trigger ships with the bar — one plugin, one install. Its layout entry carries the logo settings (`{"id": "skal.bar", "logo": "󰣇"}`), so the default Omarchy menu stays untouched; a cloned `*.menu` widget works too if you prefer to keep them separate.
 
 ## Credits
 
