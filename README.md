@@ -4,7 +4,15 @@ Omarchy status bar plugin: Bartender-style hidden widget drawers, Noctalia-style
 
 Runs inside `omarchy-shell`. Nothing in `/usr/share` is modified.
 
-![Skål Bar](docs-screenshot.png)
+![Widgets tucked behind per-section reveal indicators](preview.png)
+
+![The same bar with its drawers open](bar-expanded.png)
+
+Each section is a Bartender strip: widgets hide behind a reveal indicator (`›`, dots, or your own glyph) and slide out on hover or click. Arrange everything visually in the settings GUI:
+
+![Settings GUI — Widgets tab](widgets-tab.png)
+
+![Settings GUI — Appearance tab](appearance-tab.png)
 
 ## Features
 
