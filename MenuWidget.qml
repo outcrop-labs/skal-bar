@@ -15,7 +15,7 @@ import qs.Ui
 BarWidget {
   id: root
 
-  property string logoText: String(setting("logo", ""))
+  property string logoText: String(setting("logo", "\ue900"))
   property string logoFont: String(setting("logoFont", "omarchy"))
   property string logoColor: String(setting("logoColor", ""))
   property string logoImage: String(setting("logoImage", ""))

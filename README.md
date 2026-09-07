@@ -174,6 +174,15 @@ o.bind("SUPER + ALT + Q", "Quick actions", "omarchy-shell -q skal.bar.controls t
 
 The menu trigger ships with the bar — one plugin, one install. Its layout entry carries the logo settings (`{"id": "skal.bar", "logo": "󰣇"}`), so the default Omarchy menu stays untouched; a cloned `*.menu` widget works too if you prefer to keep them separate.
 
+## Troubleshooting
+
+If the menu widget fails to load after updating the plugin in place — the log shows `Plugin widget skal.bar failed` — the compiled QML cache is stale from the reload race. Clear it and restart:
+
+```bash
+rm -rf "$HOME/.cache/quickshell/qmlcache" "$HOME/.cache/quickshell"/qtpipelinecache-*
+omarchy restart shell
+```
+
 ## Credits
 
 Derived from the [Omarchy](https://omarchy.org) shell's bar and tray plugins
