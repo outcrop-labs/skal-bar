@@ -27,7 +27,7 @@
         "type": "string",
         "label": "Logo",
         "defaultValue": "",
-        "description": "Text or icon glyph shown in the bar (e.g. 󰣇, jon). Empty = default Omarchy mark."
+        "description": "Text or icon glyph shown in the bar (e.g. 󰣇, Skål). Empty = default Omarchy mark."
       },
       {
         "key": "logoFont",
