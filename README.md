@@ -1,6 +1,8 @@
 # skal.bar
 
-Omarchy status bar plugin: Bartender-style hidden widget drawers, Noctalia-style appearance control, native system tray, built-in settings GUI.
+I love the stripped-down feel of the default Omarchy bar: a thin, quiet strip that stays out of the way. But I kept running into its limits — I wanted to tuck more of it away, tune how it looks and sits on the screen, and interact with it rather than just read it. So I built the bar I wanted on top of it.
+
+That's skal.bar: the same minimal strip, now with Bartender-style hidden widget drawers, Noctalia-style appearance control, a native system tray, a quick action panel on the menu trigger, and a settings GUI so none of it requires editing JSON by hand.
 
 Runs inside `omarchy-shell`. Nothing in `/usr/share` is modified.
 
@@ -14,6 +16,20 @@ Each section is a Bartender strip: widgets hide behind a reveal indicator (`›`
 
 ![Settings GUI — Appearance tab](appearance-tab.png)
 
+The same idea at work across the bar — sections tuck away, then reappear the moment you ask:
+
+| Center tucked — `…` marks the drawer | Center revealed — `…` crossfades to `×` |
+|---|---|
+| ![Center section hidden behind the dots indicator](bar-center-hidden.png) | ![Center section revealed, dots crossfaded to an ×](bar-center-revealed.png) |
+
+| Left — logo & workspaces | Indicators & tray |
+|---|---|
+| ![Left section with logo and workspaces](bar-left.png) | ![Indicator and tray cluster](bar-indicators.png) |
+
+And the same right end moments later, with more indicators active as toggles land:
+
+![Right section with more indicators active](bar-indicators-active.png)
+
 ## Features
 
 - Hidden widget **drawers per section** — widgets slide out of the tray/chevron, Bartender-style
@@ -21,6 +37,7 @@ Each section is a Bartender strip: widgets hide behind a reveal indicator (`›`
 - Appearance: height, float margin, corner radius, background color/opacity, widget gap, edge padding, position
 - **Native tray** with drawer, pinned icons, item menus — chevron doubles as the reveal toggle
 - **Custom logo** on the menu widget (glyph, font, size, color, image)
+- **Quick action panel** on the menu trigger — left-click opens a 2×2 tile panel (silence notifications, night light, stay awake, dictation); right-click still opens the Omarchy menu
 - **Settings GUI**: SUPER+ALT+B or right-click blank bar space
 - Window tops track bar geometry + Hyprland gaps automatically
 
@@ -30,8 +47,11 @@ Requires [Omarchy](https://omarchy.org).
 
 ```bash
 omarchy plugin add https://github.com/outcrop-labs/skal-bar.git --enable --yes
+omarchy plugin add https://github.com/outcrop-labs/skal-menu.git --enable --yes
 omarchy bar use skal.bar
 ```
+
+`skal-menu` is the companion menu widget — it provides the logo and the quick action panel on the menu trigger.
 
 Optional keybind in `~/.config/hypr/bindings.lua`:
 
@@ -46,6 +66,7 @@ Right-click any blank bar space also opens settings.
 ```bash
 omarchy bar use omarchy.bar
 omarchy plugin remove skal.bar --yes
+omarchy plugin remove skal.menu --yes
 ```
 
 Remove the keybind from `~/.config/hypr/bindings.lua` if added.
@@ -136,6 +157,26 @@ Settings for any cloned menu widget entry. `logoMode` picks the source:
 ```
 
 The settings panel's Browse button opens the OS file picker (requires `zenity`), filtered to SVG.
+
+### Quick actions
+
+The menu trigger is more than a launcher. Left-click opens a compact quick action panel anchored to the logo:
+
+| Input | Action |
+|---|---|
+| Left-click | Quick action panel |
+| Right-click | The Omarchy menu |
+| Middle-click | A terminal |
+
+Four tiles: **Silence Notifications** (DND), **Night Light**, **Stay Awake**, **Dictation**. Active tiles fill with the accent color, and every toggle is reflected live in the bar — flip Night Light and its indicator appears immediately.
+
+Keyboard: arrows move between tiles (sideways steps one, vertical steps a row), `Enter`/`Space` activates, `Esc` closes. Optional keybind in `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + ALT + Q", "Quick actions", "omarchy-shell shell toggle skal.menu.controls")
+```
+
+The panel and the logo settings live in the companion menu widget ([skal-menu](https://github.com/outcrop-labs/skal-menu)), a clone of `omarchy.menu`.
 
 ## Credits
 
