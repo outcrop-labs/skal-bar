@@ -29,6 +29,10 @@ Item {
   // Manifest for the active bar option. Present for custom bars and useful for
   // diagnostics; the built-in bar does not otherwise need it.
   property var manifest: null
+  // Module id of the shipped menu widget — the layout entry named after the
+  // plugin itself. Read from the manifest so a renamed clone still finds its
+  // own quick action panel for the bar-owned skal.bar.controls IPC below.
+  readonly property string menuWidgetModuleId: manifest && manifest.id ? String(manifest.id) : "skal.bar"
   // Mirrors the on-disk `bar-off` flag so the user can hide the bar without
   // killing the entire shell. Hidden panels stay mapped but park off-screen
   // without an exclusion zone; updated by the FileView watcher further down.
@@ -1212,6 +1216,64 @@ Item {
     function syncHidden(): void {
       barHiddenProbe.running = true
     }
+  }
+
+  // The menu widget's quick action panel exists once per bar surface, so its
+  // own IpcHandler would only answer on whichever monitor's copy registered
+  // the target first — with more than one screen the hotkey would pop the
+  // panel somewhere other than where the user is. The bar is a singleton, so
+  // it owns the target instead and resolves the focused monitor's copy the
+  // same way shell.summon/toggle do (findPanelSlot -> pickPanelSlot). The
+  // widget's Panel sets manageIpc: false to keep this the only registration.
+  IpcHandler {
+    target: "skal.bar.controls"
+
+    function open(): void {
+      var item = root.findPanelWidget(root.menuWidgetModuleId)
+      if (item) item.open()
+    }
+
+    function close(): void {
+      var item = root.findPanelWidget(root.menuWidgetModuleId)
+      if (item) item.close()
+    }
+
+    function toggle(): void {
+      var item = root.findPanelWidget(root.menuWidgetModuleId)
+      if (item) item.toggleControls()
+    }
+
+    // Aliases matching the stock Panel IPC surface, for callers written
+    // against omarchy's per-widget panels. Self-contained rather than
+    // delegating to the siblings above: an unqualified open()/close() in
+    // here resolves against the IpcHandler itself, which reads as recursion.
+    function show(): void {
+      var item = root.findPanelWidget(root.menuWidgetModuleId)
+      if (item) item.open()
+    }
+
+    function hide(): void {
+      var item = root.findPanelWidget(root.menuWidgetModuleId)
+      if (item) item.close()
+    }
+
+    // Dictation is the one quick action with no service to watch; this runs
+    // the toggle and lets the notifier announce the resulting daemon state.
+    function dictation(): void {
+      actionNotifier.toggleDictation()
+    }
+  }
+
+  // Toggle notifications for the quick actions. On the bar, not the menu
+  // widget, so each toggle toasts once per machine rather than once per
+  // monitor.
+  ActionNotifier {
+    id: actionNotifier
+    shell: root.shell
+  }
+
+  function announceDictationToggle() {
+    actionNotifier.toggleDictation()
   }
 
   Variants {

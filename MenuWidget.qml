@@ -11,7 +11,8 @@ import qs.Ui
 // Settings: logo (text/glyph), logoFont (family), logoColor (#hex),
 // logoSize (px), logoImage (path — shown instead of text).
 // Left-click opens the quick action panel; right-click the Omarchy menu;
-// middle-click a terminal. The panel's IPC target is skal.bar.controls.
+// middle-click a terminal. The panel's IPC target is skal.bar.controls, owned
+// by the bar (see Bar.qml) so the hotkey reaches the focused monitor's copy.
 BarWidget {
   id: root
 
@@ -42,8 +43,12 @@ BarWidget {
   readonly property var idleService: bar && bar.shell ? bar.shell.firstPartyServiceFor("omarchy.idle") : null
 
   // The dropdown lives in a Panel so the bar's popup machinery (tab order,
-  // one-popout-at-a-time, summon) applies, with its own IPC target for the
-  // hotkey. The widget root proxies open/close so the bar can address it.
+  // one-popout-at-a-time, summon) applies. The widget root proxies open/close
+  // so the bar can address it — including from the bar-owned IPC handler for
+  // the hotkey. This widget is instantiated once per bar surface (per
+  // monitor), so its Panel cannot own the IPC target itself: only whichever
+  // copy registered first would answer, popping the menu on the wrong screen.
+  // The bar singleton registers skal.bar.controls instead.
   function open() { controlsPanel.open() }
   function close() { controlsPanel.close() }
   function toggleControls() { controlsPanel.opened ? controlsPanel.close() : controlsPanel.open() }
@@ -134,6 +139,9 @@ BarWidget {
     bar: root.bar
     moduleName: "skal.bar.controls"
     ipcTarget: "skal.bar.controls"
+    // The bar singleton owns this target (focused-monitor routing); a
+    // per-instance handler here would race the other monitors' copies.
+    manageIpc: false
 
     property int cursorIndex: 0
     readonly property var rowCount: 4
@@ -150,7 +158,10 @@ BarWidget {
       } else if (index === 2) {
         if (root.idleService) root.idleService.setIdleEnabled(root.idleService.stayAwake)
       } else if (index === 3) {
-        if (root.bar) root.bar.run("voxtype record toggle")
+        // Through the bar so the toggle dispatches its notification (the
+        // bar probes the daemon state); raw fallback for bars without it.
+        if (root.bar && typeof root.bar.announceDictationToggle === "function") root.bar.announceDictationToggle()
+        else if (root.bar) root.bar.run("voxtype record toggle")
       }
     }
 
