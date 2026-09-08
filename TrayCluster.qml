@@ -32,6 +32,16 @@ Item {
   }
 
   readonly property bool expanded: bar && typeof bar.trayExposureOpen === "function" && bar.trayExposureOpen()
+
+  // This chevron is the tray section's ONLY reveal toggle — Bar.qml suppresses
+  // the section's own chevron wherever the tray is enabled. It must therefore
+  // render even with zero tray items: a boot where no app has registered a
+  // tray icon yet (apps losing the watcher race) would otherwise strand the
+  // section's hidden widgets behind a click reveal with nothing left to click.
+  readonly property bool sectionRevealArmed: bar && typeof bar.sectionHasHidden === "function"
+    ? bar.sectionHasHidden(bar.traySection)
+    : false
+  readonly property bool chevronArmed: allItems.length > 0 || sectionRevealArmed
   property bool managePopupOpen: false
   property bool trayMenuOpen: false
   property var activeTrayItem: null
@@ -233,7 +243,7 @@ Item {
     persistTrayState(p, h)
   }
 
-  visible: pinnedItems.length > 0 || drawerCount > 0
+  visible: pinnedItems.length > 0 || chevronArmed
   clip: false
   // Bar chrome sizing: nothing above assigns size (a ModuleSlot used to), so
   // apply the implicit size explicitly or the Row/Column wrappers collapse
@@ -260,7 +270,7 @@ Item {
       id: horizontalTrayRoot
 
       readonly property int pinnedWidth: pinnedRow.implicitWidth
-      readonly property int drawerBlockWidth: root.allItems.length > 0 ? expandIcon.implicitWidth + root.drawerExtent : 0
+      readonly property int drawerBlockWidth: root.chevronArmed ? expandIcon.implicitWidth + root.drawerExtent : 0
 
       implicitWidth: pinnedWidth + drawerBlockWidth
       implicitHeight: root.barSize
@@ -285,7 +295,7 @@ Item {
         x: 0
         width: horizontalTrayRoot.drawerBlockWidth
         height: root.barSize
-        visible: root.allItems.length > 0
+        visible: root.chevronArmed
 
         HoverHandler {
           onHoveredChanged: {
@@ -398,7 +408,7 @@ Item {
       id: verticalTrayRoot
 
       readonly property int pinnedHeight: pinnedCol.implicitHeight
-      readonly property int drawerBlockHeight: root.allItems.length > 0 ? expandIcon.implicitHeight + root.drawerExtent : 0
+      readonly property int drawerBlockHeight: root.chevronArmed ? expandIcon.implicitHeight + root.drawerExtent : 0
 
       implicitWidth: root.barSize
       implicitHeight: pinnedHeight + drawerBlockHeight
@@ -418,7 +428,7 @@ Item {
         y: 0
         width: root.barSize
         height: verticalTrayRoot.drawerBlockHeight
-        visible: root.allItems.length > 0
+        visible: root.chevronArmed
 
         HoverHandler {
           onHoveredChanged: {
