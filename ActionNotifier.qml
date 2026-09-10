@@ -14,6 +14,10 @@ Item {
 
   // Injected by the host shell, same handle the bar passes its widgets.
   property var shell: null
+  // The bar singleton, which owns the file-watched ground-truth state the
+  // toasts below read. Service objects die with the host's scoped api
+  // (Omarchy 4.0.3); the bar's watchers do not.
+  property var barHost: null
 
   // Services attach asynchronously and re-apply persisted state shortly
   // after load (the idle service probes its flag file, night light reads its
@@ -21,9 +25,7 @@ Item {
   // start, so stay quiet for a short grace after the bar comes up.
   property bool armed: false
 
-  readonly property var notificationsService: shell ? shell.firstPartyServiceFor("omarchy.notifications") : null
   readonly property var nightlightService: shell ? shell.firstPartyServiceFor("omarchy.nightlight") : null
-  readonly property var idleService: shell ? shell.firstPartyServiceFor("omarchy.idle") : null
 
   // Each action keeps one notification id, so re-toggling replaces the toast
   // instead of stacking a new one.
@@ -57,8 +59,26 @@ Item {
     dictationProbeDelay.restart()
   }
 
+  // The quick menu probes on open so the tile reflects the daemon state.
+  function probeDictation() {
+    if (!dictationProbe.running) dictationProbe.running = true
+  }
+
+  // The daemon is probed on every panel open (for the tile's active state),
+  // so toast only when the state actually changes — never for a first read.
+  property bool dictationSeen: false
+  property string lastDictationState: ""
+
   function notifyDictationState(status) {
     var state = String(status || "").trim()
+    if (root.barHost) root.barHost.dictationActive = state.indexOf("record") !== -1
+    if (!root.dictationSeen) {
+      root.dictationSeen = true
+      root.lastDictationState = state
+      return
+    }
+    if (state === root.lastDictationState) return
+    root.lastDictationState = state
     if (state.indexOf("record") !== -1)
       root.send("󰍬", "Dictation recording", "Speech is being transcribed", root.dictationNotificationId)
     else if (state === "idle")
@@ -89,30 +109,32 @@ Item {
     }
   }
 
+  // DND and stay-awake toast from the bar's file-watched state, so every
+  // source dispatches — panel tiles, hotkeys, the omarchy CLI, even the
+  // host's own notification center — including while the scoped api is
+  // dead. (Same philosophy as the service watchers below, one level down.)
   Connections {
-    target: root.notificationsService
-    function onDoNotDisturbChanged() {
-      var on = root.notificationsService && root.notificationsService.doNotDisturb === true
+    target: root.barHost
+    function onDndStateChanged() {
+      var on = root.barHost && root.barHost.dndState === true
       root.notify("󰂛", on ? "Notifications silenced" : "Notifications on",
         on ? "Do not disturb is holding notifications" : "", root.dndNotificationId)
     }
+    function onStayAwakeStateChanged() {
+      var on = root.barHost && root.barHost.stayAwakeState === true
+      root.notify("󰅶", on ? "Stay awake on" : "Stay awake off",
+        on ? "Screen won't dim, lock, or sleep" : "Idle screensaver and lock re-enabled",
+        root.stayAwakeNotificationId)
+    }
   }
 
+  // Night light keeps no state file (it lives in hyprsunset), so the live
+  // service remains its only change signal.
   Connections {
     target: root.nightlightService
     function onEnabledChanged() {
       var on = root.nightlightService && root.nightlightService.enabled === true
       root.notify("󰔎", on ? "Night light on" : "Night light off", "", root.nightlightNotificationId)
-    }
-  }
-
-  Connections {
-    target: root.idleService
-    function onStayAwakeChanged() {
-      var on = root.idleService && root.idleService.stayAwake === true
-      root.notify("󰅶", on ? "Stay awake on" : "Stay awake off",
-        on ? "Screen won't dim, lock, or sleep" : "Idle screensaver and lock re-enabled",
-        root.stayAwakeNotificationId)
     }
   }
 }

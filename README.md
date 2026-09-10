@@ -155,19 +155,23 @@ Settings for any cloned menu widget entry. `logoMode` picks the source:
 
 The settings panel's Browse button opens the OS file picker (requires `zenity`), filtered to SVG.
 
-### Quick actions
+### Quick menu
 
-The menu trigger is more than a launcher. Left-click opens a compact quick action panel anchored to the logo:
+The menu trigger is more than a launcher. Left-click opens the quick menu anchored to the logo, stacked top to bottom:
+
+- **Weather** — a compact current-conditions row (icon, temperature, condition, place, wind) using the same sources as the stock weather panel: the `weather.json` location file and wttr.in. Click the row to re-fetch. Empty until the first fetch lands.
+- **Quick actions** — four tiles in one row: **Silence Notifications** (DND), **Night Light**, **Stay Awake**, **Dictation**. Tiles are strictly on/off: active fills with the accent (icon reversed), and the switch animates between the two states; hovering lifts the fill slightly. Every toggle is reflected live in the bar — flip Night Light and its indicator appears immediately.
+- **Notifications** — the live toasts and recorded history in one newest-first list, in its own scrollable view. Every row has a per-item dismiss button, and **Dismiss all** clears the lot (toasts and history).
 
 | Input | Action |
 |---|---|
-| Left-click | Quick action panel |
+| Left-click | Quick menu |
 | Right-click | The Omarchy menu |
 | Middle-click | A terminal |
 
-Four tiles: **Silence Notifications** (DND), **Night Light**, **Stay Awake**, **Dictation**. Active tiles fill with the accent color, and every toggle is reflected live in the bar — flip Night Light and its indicator appears immediately.
+Toggle state never rides the host's scoped shell API — Omarchy 4.0.3 can destroy it mid-session, which used to leave the tiles dead. The bar reads the same files the host itself persists and watches (DND from `notifications.json`, stay-awake from the indicators flag file) plus one-shot probes for the state that lives in daemons (night light in hyprsunset, dictation in voxtype), and applies toggles through the live service when it's there with the `omarchy` CLI as fallback.
 
-Keyboard: arrows move between tiles (sideways steps one, vertical steps a row), `Enter`/`Space` activates, `Esc` closes. See [Hotkeys](#hotkeys) for opening the panel from the keyboard and binding the individual tiles.
+Tiles answer to direct clicks and the global hotkeys — there is no in-panel keyboard navigation. `Esc` closes the menu. See [Hotkeys](#hotkeys) for opening the panel and binding the individual tiles.
 
 The menu trigger ships with the bar — one plugin, one install. Its layout entry carries the logo settings (`{"id": "skal.bar", "logo": "󰣇"}`), so the default Omarchy menu stays untouched; a cloned `*.menu` widget works too if you prefer to keep them separate.
 
@@ -215,6 +219,16 @@ Two gotchas worth knowing:
 - **F-row keys can be media keys.** On keyboards whose F1–F12 default to brightness/volume (many laptops and the Keychron F-row switch), the bind never fires — hold `Fn` or flip Fn-lock.
 
 Any other action can be bound the same way: point `o.bind` at the command behind the tile. The service-backed set: `omarchy toggle notification silencing`, `omarchy toggle nightlight`, and `omarchy toggle idle` (or `stay-awake` / `allow-idle` for explicit on/off). Dictation has no such CLI state, so it routes through the bar (see below).
+
+### Dismiss all notifications
+
+The quick menu's list has a bindable dismiss-all, same target as the panel itself:
+
+```lua
+o.bind("SUPER + SHIFT + N", "Dismiss notifications", "omarchy-shell -q skal.bar.controls dismissAll")
+```
+
+It clears the on-screen toasts and the recorded history in one go — the same thing the **Dismiss all** button in the menu does.
 
 ### Notifications
 

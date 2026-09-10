@@ -7,6 +7,7 @@ import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
 import "BarModel.js" as BarModel
+import "WeatherModel.js" as WeatherModel
 
 Item {
   id: root
@@ -859,7 +860,12 @@ Item {
     return source ? Util.fileUrl(source) : ""
   }
 
-  Component.onCompleted: applyBarConfig()
+  Component.onCompleted: {
+    applyBarConfig()
+    probeQuickState()
+    probeWeather()
+    refreshNotificationRows()
+  }
 
   // Revealing the indicators widens their section, which can slide a neighbour
   // under a stationary pointer. Collapsing on that un-hover would move it back
@@ -1295,6 +1301,298 @@ Item {
     function dictation(): void {
       actionNotifier.toggleDictation()
     }
+
+    // Dismiss every quick-menu notification (toasts + recorded history) —
+    // exposed for a keybinding, same shape as the siblings above.
+    function dismissAll(): void {
+      root.dismissAllNotificationRows()
+    }
+  }
+
+  // ---- Quick-action ground truth -----------------------------------
+  // Omarchy 4.0.3 can destroy the scoped shell API it injects (plugin-API
+  // pruning during registry churn), which silently kills every service
+  // binding the quick menu tiles and indicator dots read. The state files
+  // and probes below are what the host itself persists and watches, so the
+  // bar treats them as the source of truth for display; live service
+  // objects are only used to APPLY toggles while they happen to be alive
+  // (they keep the host's in-memory state consistent), with the omarchy CLI
+  // as the fallback.
+  property bool dndState: false
+  property bool stayAwakeState: false
+  property bool nightlightState: false
+  property bool dictationActive: false
+  property var notificationRows: []
+  property var hiddenNotificationKeys: ({})
+  property var weatherReport: null
+  property real weatherAt: 0
+  property var weatherLocation: ({ name: "", latitude: null, longitude: null })
+
+  readonly property string notificationsStateDir: stateHome + "/omarchy/notifications"
+  readonly property string notificationsHistoryDir: notificationsStateDir + "/history"
+
+  function liveServiceFor(id) {
+    return shell && typeof shell.firstPartyServiceFor === "function"
+      ? shell.firstPartyServiceFor(id) : null
+  }
+
+  function toggleQuickDnd() {
+    var s = liveServiceFor("omarchy.notifications")
+    if (s && typeof s.setDoNotDisturb === "function") s.setDoNotDisturb(!s.doNotDisturb)
+    else Util.execArgv(["omarchy-shell", "-q", "notifications", "toggleDnd"])
+  }
+
+  function toggleQuickNightlight() {
+    var s = liveServiceFor("omarchy.nightlight")
+    if (s && typeof s.setNightlight === "function") s.setNightlight(!s.enabled)
+    else Util.execArgv(["omarchy", "toggle", "nightlight"])
+    nightlightProbeDelay.restart()
+  }
+
+  function toggleQuickStayAwake() {
+    var s = liveServiceFor("omarchy.idle")
+    // idleEnabled is the complement of stayAwake, so passing the current
+    // stayAwake flips it (the same dance the stock indicator does).
+    if (s && typeof s.setIdleEnabled === "function") s.setIdleEnabled(s.stayAwake)
+    else Util.execArgv(["omarchy", "toggle", "idle"])
+  }
+
+  // Re-probe everything with no watchable file (nightlight lives in
+  // hyprsunset, dictation in the voxtype daemon). The panel calls this on
+  // every open; files cover the rest continuously.
+  function probeQuickState() {
+    if (!stayAwakeProbe.running) stayAwakeProbe.running = true
+    if (!nightlightProbe.running) nightlightProbe.running = true
+    if (typeof actionNotifier.probeDictation === "function") actionNotifier.probeDictation()
+  }
+
+  Process {
+    id: stayAwakeProbe
+    command: ["bash", "-c",
+      "[[ -f \"$HOME/.local/state/omarchy/indicators/stay-awake\" ]] && echo yes || echo no"]
+    stdout: SplitParser {
+      onRead: function(line) { root.stayAwakeState = String(line).trim() === "yes" }
+    }
+  }
+
+  Process {
+    id: nightlightProbe
+    command: ["omarchy", "toggle", "nightlight", "--status"]
+    stdout: SplitParser {
+      onRead: function(line) {
+        var raw = String(line).trim()
+        if (raw.indexOf("{") !== 0) return
+        try { root.nightlightState = JSON.parse(raw).enabled === true } catch (e) {}
+      }
+    }
+  }
+
+  // hyprsunset applies asynchronously; give the toggle a beat before probing.
+  Timer {
+    id: nightlightProbeDelay
+    interval: 900
+    onTriggered: if (!nightlightProbe.running) nightlightProbe.running = true
+  }
+
+  FileView {
+    id: dndStateFile
+    printErrors: false
+    watchChanges: true
+    path: root.stateHome + "/omarchy/notifications.json"
+    onFileChanged: reload()
+    onLoaded: {
+      try { root.dndState = JSON.parse(text()).dnd === true } catch (e) {}
+    }
+  }
+
+  // The host's own idle service watches this directory the same way: the
+  // flag file's existence is the state, so watch the dir and re-probe.
+  FileView {
+    id: indicatorsDirWatcher
+    printErrors: false
+    watchChanges: true
+    path: root.stateHome + "/omarchy/indicators"
+    onFileChanged: if (!stayAwakeProbe.running) stayAwakeProbe.running = true
+  }
+
+  // ---- Notification list -------------------------------------------
+  // Active toasts live as JSON files directly under notifications/, land in
+  // history/ when they expire or are dismissed, and the history dir IS the
+  // recorded history (the service re-reads it from disk). Watching both
+  // directories gives a live, machine-wide list with no service object.
+  function notificationRowKey(row) {
+    if (!row) return ""
+    if (row.originalId !== undefined && row.originalId !== null && row.originalId !== 0)
+      return "id:" + row.originalId
+    if (row.id !== undefined && row.id !== null && row.id !== 0) return "id:" + row.id
+    return "k:" + row.app + "|" + row.summary + "|" + row.timestamp
+  }
+
+  function refreshNotificationRows() {
+    notificationListDelay.restart()
+  }
+
+  Timer {
+    id: notificationListDelay
+    interval: 150
+    onTriggered: if (!notificationListProc.running) notificationListProc.running = true
+  }
+
+  Process {
+    id: notificationListProc
+    command: ["bash", "-c",
+      "shopt -s nullglob\n" +
+      "pop=\"$HOME/.local/state/omarchy/notifications\"\n" +
+      "hist=\"$pop/history\"\n" +
+      "live=$(jq -cs 'map(.live = true | .file = input_filename)' \"$pop\"/*.json 2>/dev/null)\n" +
+      "past=$(jq -cs 'map(.file = input_filename)' \"$hist\"/*.json 2>/dev/null)\n" +
+      "prog='$a + $b | sort_by(-(.timestamp // 0)) | .[0:24]'\n" +
+      "jq -cn --argjson a \"${live:-[]}\" --argjson b \"${past:-[]}\" \"$prog\""]
+    stdout: SplitParser {
+      onRead: function(line) {
+        var raw = String(line).trim()
+        if (raw.indexOf("[") !== 0) return
+        try { root.applyNotificationRows(JSON.parse(raw)) } catch (e) {}
+      }
+    }
+  }
+
+  function applyNotificationRows(rows) {
+    var kept = []
+    var seen = ({})
+    for (var i = 0; i < rows.length; i++) {
+      var key = notificationRowKey(rows[i])
+      if (hiddenNotificationKeys[key] || seen[key]) continue
+      seen[key] = true
+      kept.push(rows[i])
+    }
+    notificationRows = kept
+
+    // Hidden keys exist to absorb rows the host is about to write (a
+    // dismissed toast lands in history); drop them once the underlying row
+    // has aged out of the on-disk list on its own.
+    var prune = ({})
+    for (var k in hiddenNotificationKeys) {
+      for (var j = 0; j < rows.length; j++) {
+        if (notificationRowKey(rows[j]) === k) { prune[k] = true; break }
+      }
+    }
+    hiddenNotificationKeys = prune
+  }
+
+  function dismissNotificationRow(row) {
+    if (!row) return
+    var hidden = ({})
+    for (var k in hiddenNotificationKeys) hidden[k] = true
+    hidden[notificationRowKey(row)] = true
+    hiddenNotificationKeys = hidden
+    if (row.live === true) {
+      // Host IPC takes the toast off the screen; the history entry it then
+      // becomes is kept out of the list by the hidden key above.
+      Util.execArgv(["omarchy-shell", "-q", "notifications", "dismiss", String(row.summary || "")])
+    } else if (row.file) {
+      Util.execArgv(["bash", "-c", "rm -f -- '" + String(row.file).replace(/'/g, "'\\''") + "'"])
+    }
+    refreshNotificationRows()
+  }
+
+  function dismissAllNotificationRows() {
+    var hidden = ({})
+    for (var i = 0; i < notificationRows.length; i++)
+      hidden[notificationRowKey(notificationRows[i])] = true
+    hiddenNotificationKeys = hidden
+    Util.execArgv(["omarchy-shell", "-q", "notifications", "dismissAll"])
+    Util.execArgv(["omarchy-shell", "-q", "notifications", "clear"])
+    refreshNotificationRows()
+  }
+
+  FileView {
+    id: notificationsDirWatcher
+    printErrors: false
+    watchChanges: true
+    path: root.notificationsStateDir
+    onFileChanged: root.refreshNotificationRows()
+  }
+
+  FileView {
+    id: notificationsHistoryWatcher
+    printErrors: false
+    watchChanges: true
+    path: root.notificationsHistoryDir
+    onFileChanged: root.refreshNotificationRows()
+  }
+
+  // ---- Weather -------------------------------------------------------
+  // Same sources as the stock weather panel: the location file (when set)
+  // and a wttr.in current-conditions fetch, kept alive on the bar so the
+  // per-monitor menu copies share one request.
+  readonly property var weatherCurrent: weatherReport && weatherReport.current_condition
+    && weatherReport.current_condition.length > 0 ? weatherReport.current_condition[0] : null
+  readonly property var weatherArea: weatherReport && weatherReport.nearest_area
+    && weatherReport.nearest_area[0] ? weatherReport.nearest_area[0] : null
+  readonly property string weatherCountry: weatherArea && weatherArea.country
+    && weatherArea.country[0] ? weatherArea.country[0].value : ""
+  readonly property bool weatherImperial: WeatherModel.shouldUseImperial("", Qt.locale().name, weatherCountry)
+  readonly property bool weatherIsNight: {
+    var h = new Date().getHours()
+    return h < 7 || h >= 19
+  }
+  readonly property string weatherIcon: weatherCurrent
+    ? WeatherModel.iconForCode(weatherCurrent.weatherCode, weatherIsNight) : "󰼰"
+  readonly property string weatherTemp: weatherCurrent
+    ? WeatherModel.formatTemp(weatherImperial ? weatherCurrent.temp_F : weatherCurrent.temp_C, weatherImperial) : ""
+  readonly property string weatherCondition: weatherCurrent && weatherCurrent.weatherDesc
+    && weatherCurrent.weatherDesc[0] ? weatherCurrent.weatherDesc[0].value : ""
+  readonly property string weatherPlace: weatherLocation.name
+    || (weatherArea && weatherArea.areaName && weatherArea.areaName[0]
+      ? weatherArea.areaName[0].value : "")
+  readonly property string weatherWind: weatherCurrent && weatherCurrent.windspeedKmph !== undefined
+    ? (weatherImperial ? weatherCurrent.windspeedMiles + " mph" : weatherCurrent.windspeedKmph + " km/h") : ""
+
+  function probeWeather() {
+    if (!weatherProc.running) weatherProc.running = true
+  }
+
+  FileView {
+    id: weatherLocationFile
+    printErrors: false
+    watchChanges: true
+    path: root.stateHome + "/omarchy/settings/weather.json"
+    onFileChanged: reload()
+    onLoaded: {
+      var next = WeatherModel.parseLocationFile(text())
+      weatherLocation = next
+      probeWeather()
+    }
+    onLoadFailed: weatherLocation = WeatherModel.parseLocationFile("")
+  }
+
+  Process {
+    id: weatherProc
+    command: ["curl", "-fsS", "--max-time", "8", "https://wttr.in/"
+      + WeatherModel.wttrLocationQuery(root.weatherLocation.name, root.weatherLocation.latitude,
+          root.weatherLocation.longitude)
+      + "?format=j1"]
+    // wttr.in answers with pretty-printed multi-line JSON, so collect the
+    // whole response rather than parse per line.
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var raw = String(text || "").trim()
+        if (raw.indexOf("{") !== 0) return
+        try {
+          root.weatherReport = JSON.parse(raw)
+          root.weatherAt = Date.now()
+        } catch (e) {}
+      }
+    }
+  }
+
+  Timer {
+    interval: 15 * 60 * 1000
+    running: true
+    repeat: true
+    onTriggered: root.probeWeather()
   }
 
   // Toggle notifications for the quick actions. On the bar, not the menu
@@ -1303,6 +1601,7 @@ Item {
   ActionNotifier {
     id: actionNotifier
     shell: root.shell
+    barHost: root
   }
 
   function announceDictationToggle() {

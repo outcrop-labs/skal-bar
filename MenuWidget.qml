@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 import qs.Commons
 import Quickshell
 import qs.Ui
@@ -10,13 +11,16 @@ import qs.Ui
 //   { "id": "skal.bar", "logoImage": "~/.config/omarchy/logo.png" }
 // Settings: logo (text/glyph), logoFont (family), logoColor (#hex),
 // logoSize (px), logoImage (path — shown instead of text).
-// Left-click opens the quick action panel; right-click the Omarchy menu;
-// middle-click a terminal. The panel's IPC target is skal.bar.controls, owned
-// by the bar (see Bar.qml) so the hotkey reaches the focused monitor's copy.
+// Left-click opens the quick menu (weather, quick actions, notifications);
+// right-click the Omarchy menu; middle-click a terminal. The panel's IPC
+// target is skal.bar.controls, owned by the bar (see Bar.qml) so the hotkey
+// reaches the focused monitor's copy. Toggle state comes from the bar's
+// file-watched ground truth — never from the host's scoped api, which
+// Omarchy 4.0.3 can destroy mid-session.
 BarWidget {
   id: root
 
-  property string logoText: String(setting("logo", "\ue900"))
+  property string logoText: String(setting("logo", ""))
   property string logoFont: String(setting("logoFont", "omarchy"))
   property string logoColor: String(setting("logoColor", ""))
   property string logoImage: String(setting("logoImage", ""))
@@ -36,11 +40,6 @@ BarWidget {
     return Color.foreground
   }
   readonly property bool useImage: logoMode === "image"
-
-  // Live services backing the indicator controls.
-  readonly property var notificationsService: bar && bar.shell ? bar.shell.firstPartyServiceFor("omarchy.notifications") : null
-  readonly property var nightlightService: bar && bar.shell ? bar.shell.firstPartyServiceFor("omarchy.nightlight") : null
-  readonly property var idleService: bar && bar.shell ? bar.shell.firstPartyServiceFor("omarchy.idle") : null
 
   // The dropdown lives in a Panel so the bar's popup machinery (tab order,
   // one-popout-at-a-time, summon) applies. The widget root proxies open/close
@@ -134,6 +133,31 @@ BarWidget {
     }
   }
 
+  function relativeTime(ts) {
+    var t = Number(ts)
+    if (!isFinite(t) || t <= 0) return ""
+    var s = Math.max(0, Math.floor((Date.now() - t) / 1000))
+    if (s < 45) return "now"
+    var m = Math.floor(s / 60)
+    if (m < 60) return m + "m"
+    var h = Math.floor(m / 60)
+    if (h < 24) return h + "h"
+    return Math.floor(h / 24) + "d"
+  }
+
+  function rebuildNotifModel() {
+    notifListModel.clear()
+    var rows = root.bar ? root.bar.notificationRows : []
+    for (var i = 0; i < rows.length; i++) notifListModel.append(rows[i])
+  }
+
+  Connections {
+    target: root.bar
+    function onNotificationRowsChanged() { root.rebuildNotifModel() }
+  }
+
+  ListModel { id: notifListModel }
+
   Panel {
     id: controlsPanel
     bar: root.bar
@@ -143,26 +167,24 @@ BarWidget {
     // per-instance handler here would race the other monitors' copies.
     manageIpc: false
 
-    property int cursorIndex: 0
-    readonly property var rowCount: 4
     onOpenedChanged: {
-      cursorIndex = 0
-      if (opened) controlsKeyCatcher.forceActiveFocus()
+      if (opened) {
+        controlsKeyCatcher.forceActiveFocus()
+        if (root.bar) {
+          root.bar.probeQuickState()
+          root.bar.refreshNotificationRows()
+          if (!root.bar.weatherCurrent || Date.now() - root.bar.weatherAt > 5 * 60 * 1000)
+            root.bar.probeWeather()
+        }
+      }
     }
 
     function activateRow(index) {
-      if (index === 0) {
-        if (root.notificationsService) root.notificationsService.setDoNotDisturb(!root.notificationsService.doNotDisturb)
-      } else if (index === 1) {
-        if (root.nightlightService) root.nightlightService.setNightlight(!root.nightlightService.enabled)
-      } else if (index === 2) {
-        if (root.idleService) root.idleService.setIdleEnabled(root.idleService.stayAwake)
-      } else if (index === 3) {
-        // Through the bar so the toggle dispatches its notification (the
-        // bar probes the daemon state); raw fallback for bars without it.
-        if (root.bar && typeof root.bar.announceDictationToggle === "function") root.bar.announceDictationToggle()
-        else if (root.bar) root.bar.run("voxtype record toggle")
-      }
+      if (!root.bar) return
+      if (index === 0) root.bar.toggleQuickDnd()
+      else if (index === 1) root.bar.toggleQuickNightlight()
+      else if (index === 2) root.bar.toggleQuickStayAwake()
+      else if (index === 3) root.bar.announceDictationToggle()
     }
 
     PopupCard {
@@ -175,120 +197,315 @@ BarWidget {
       // The kit card never asks for keyboard focus; grabFocus is the
       // PopupWindow keyboard mechanism — without it no keys reach the popup.
       grabFocus: controlsPanel.opened
-      contentWidth: Style.space(150)
-      contentHeight: Style.space(146)
 
+      // Even spacing by construction: the gap between tiles equals the
+      // card's edge inset (padding + border), and every section uses the
+      // same unit, so the card reads evenly padded whatever the theme's
+      // spacing scale does.
+      padding: Style.space(8)
+      readonly property int edge: padding + Border.top(borderSpec)
+      readonly property int tileGap: edge
+      readonly property int tilesPerRow: 4
+      readonly property real tileWidth: (contentWidth - 2 * edge - (tilesPerRow - 1) * tileGap) / tilesPerRow
+
+      contentWidth: Style.space(340)
+      contentHeight: Math.round(menuColumn.implicitHeight + 2 * edge)
+
+      
       Item {
         id: controlsKeyCatcher
         anchors.fill: parent
         focus: controlsPanel.opened
 
         Keys.onEscapePressed: controlsPanel.close()
-        // 2x2 grid navigation: sideways steps one, vertical steps a row.
-        Keys.onLeftPressed: {
-          controlsPanel.cursorIndex = (controlsPanel.cursorIndex + 3) % 4
-          event.accepted = true
-        }
-        Keys.onRightPressed: {
-          controlsPanel.cursorIndex = (controlsPanel.cursorIndex + 1) % 4
-          event.accepted = true
-        }
-        Keys.onUpPressed: {
-          controlsPanel.cursorIndex = (controlsPanel.cursorIndex + 2) % 4
-          event.accepted = true
-        }
-        Keys.onDownPressed: {
-          controlsPanel.cursorIndex = (controlsPanel.cursorIndex + 2) % 4
-          event.accepted = true
-        }
-        Keys.onReturnPressed: {
-          controlsPanel.activateRow(controlsPanel.cursorIndex)
-          event.accepted = true
-        }
-        Keys.onSpacePressed: {
-          controlsPanel.activateRow(controlsPanel.cursorIndex)
-          event.accepted = true
-        }
 
-        GridLayout {
-          id: controlsGrid
-          // Natural size, dead-centered: slack splits evenly on every side,
-          // so the margins read even regardless of the card's frame metrics.
-          anchors.centerIn: parent
-          columns: 2
-          rowSpacing: Style.space(6)
-          columnSpacing: Style.space(6)
+        ColumnLayout {
+          id: menuColumn
+          anchors.fill: parent
+          spacing: controlsCard.edge
 
-          ControlTile {
-            glyph: "󰂛"
-            name: "Silence Notifications"
-            active: root.notificationsService ? root.notificationsService.doNotDisturb : false
-            hasCursor: controlsPanel.cursorIndex === 0
-            foreground: root.bar ? root.bar.foreground : Color.foreground
-            onActivated: controlsPanel.activateRow(0)
+          // ---- compact weather --------------------------------------
+          Item {
+            Layout.fillWidth: true
+            implicitHeight: weatherRow.implicitHeight
+
+            RowLayout {
+              id: weatherRow
+              anchors.fill: parent
+              spacing: controlsCard.edge
+
+              Text {
+                text: root.bar && root.bar.weatherIcon ? root.bar.weatherIcon : "󰼰"
+                color: root.bar ? root.bar.foreground : Color.foreground
+                font.family: Style.font.family
+                font.pixelSize: Style.font.display
+              }
+
+              ColumnLayout {
+                spacing: 0
+                RowLayout {
+                  spacing: Style.space(6)
+                  Layout.fillWidth: true
+                  Text {
+                    text: root.bar ? root.bar.weatherTemp : ""
+                    color: root.bar ? root.bar.foreground : Color.foreground
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.title
+                  }
+                  Text {
+                    text: root.bar ? root.bar.weatherCondition : ""
+                    color: Color.muted
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.body
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                  }
+                  Text {
+                    text: root.bar ? root.bar.weatherPlace : ""
+                    color: Color.muted
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.body
+                    elide: Text.ElideRight
+                    visible: text !== ""
+                  }
+                }
+                Text {
+                  text: [root.bar ? root.bar.weatherWind : ""].filter(function(part) { return part !== "" }).join("  ·  ")
+                  color: Color.muted
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  visible: text !== ""
+                }
+              }
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: if (root.bar) root.bar.probeWeather()
+            }
           }
 
-          ControlTile {
-            glyph: "󰔎"
-            name: "Night Light"
-            active: root.nightlightService ? root.nightlightService.enabled : false
-            hasCursor: controlsPanel.cursorIndex === 1
-            foreground: root.bar ? root.bar.foreground : Color.foreground
-            onActivated: controlsPanel.activateRow(1)
+          // ---- quick actions (1x4) ----------------------------------
+          GridLayout {
+            Layout.fillWidth: true
+            columns: controlsCard.tilesPerRow
+            columnSpacing: controlsCard.tileGap
+            rowSpacing: controlsCard.tileGap
+
+            ControlTile {
+              tileSize: controlsCard.tileWidth
+              glyph: "󰂛"
+              name: "Silence Notifications"
+              active: root.bar && root.bar.dndState
+              foreground: root.bar ? root.bar.foreground : Color.foreground
+              onActivated: controlsPanel.activateRow(0)
+            }
+
+            ControlTile {
+              tileSize: controlsCard.tileWidth
+              glyph: "󰔎"
+              name: "Night Light"
+              active: root.bar && root.bar.nightlightState
+              foreground: root.bar ? root.bar.foreground : Color.foreground
+              onActivated: controlsPanel.activateRow(1)
+            }
+
+            ControlTile {
+              tileSize: controlsCard.tileWidth
+              glyph: "󰅶"
+              name: "Stay Awake"
+              active: root.bar && root.bar.stayAwakeState
+              foreground: root.bar ? root.bar.foreground : Color.foreground
+              onActivated: controlsPanel.activateRow(2)
+            }
+
+            ControlTile {
+              tileSize: controlsCard.tileWidth
+              glyph: "󰍬"
+              name: "Dictation"
+              active: root.bar && root.bar.dictationActive
+              foreground: root.bar ? root.bar.foreground : Color.foreground
+              onActivated: controlsPanel.activateRow(3)
+            }
           }
 
-          ControlTile {
-            glyph: "󰅶"
-            name: "Stay Awake"
-            active: root.idleService ? root.idleService.stayAwake : false
-            hasCursor: controlsPanel.cursorIndex === 2
-            foreground: root.bar ? root.bar.foreground : Color.foreground
-            onActivated: controlsPanel.activateRow(2)
+          // ---- notifications ----------------------------------------
+          RowLayout {
+            Layout.fillWidth: true
+            spacing: controlsCard.edge
+
+            Text {
+              text: "Notifications"
+              color: Color.muted
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Text {
+              text: "Dismiss all"
+              color: Color.accent
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+              visible: notifListModel.count > 0
+
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: if (root.bar) root.bar.dismissAllNotificationRows()
+              }
+            }
           }
 
-          ControlTile {
-            glyph: "󰍬"
-            name: "Dictation"
-            active: false
-            hasCursor: controlsPanel.cursorIndex === 3
-            foreground: root.bar ? root.bar.foreground : Color.foreground
-            onActivated: controlsPanel.activateRow(3)
+          Item {
+            Layout.fillWidth: true
+            implicitHeight: Style.space(210)
+            clip: true
+
+            ListView {
+              id: notifList
+              anchors.fill: parent
+              model: notifListModel
+              spacing: controlsCard.edge
+              boundsBehavior: Flickable.StopAtBounds
+              clip: true
+              ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+              delegate: Rectangle {
+                width: notifList.width
+                height: notifRowLayout.implicitHeight + 2 * controlsCard.edge
+                radius: Math.min(Style.cornerRadius, Style.space(6))
+                color: Qt.rgba((root.bar ? root.bar.foreground : Color.foreground).r,
+                  (root.bar ? root.bar.foreground : Color.foreground).g,
+                  (root.bar ? root.bar.foreground : Color.foreground).b, 0.04)
+
+                RowLayout {
+                  id: notifRowLayout
+                  anchors.fill: parent
+                  anchors.margins: controlsCard.edge
+                  spacing: controlsCard.edge
+
+                  Text {
+                    text: model.glyph ? model.glyph : "󰂚"
+                    color: model.live === true ? Color.accent
+                      : (root.bar ? root.bar.foreground : Color.foreground)
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.icon
+                    Layout.alignment: Qt.AlignTop
+                  }
+
+                  ColumnLayout {
+                    spacing: 0
+                    Layout.fillWidth: true
+
+                    RowLayout {
+                      spacing: Style.space(6)
+                      Layout.fillWidth: true
+                      Text {
+                        text: model.summary || ""
+                        color: root.bar ? root.bar.foreground : Color.foreground
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.body
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                      }
+                      Text {
+                        text: root.relativeTime(model.timestamp)
+                        color: Color.muted
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.caption
+                      }
+                    }
+
+                    Text {
+                      text: model.body || ""
+                      color: Color.muted
+                      font.family: Style.font.family
+                      font.pixelSize: Style.font.bodySmall
+                      wrapMode: Text.WrapAnywhere
+                      elide: Text.ElideRight
+                      maximumLineCount: 2
+                      visible: text !== ""
+                      Layout.fillWidth: true
+                    }
+                  }
+
+                  Text {
+                    text: "󰅖"
+                    color: Color.muted
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.iconSmall
+                    Layout.alignment: Qt.AlignTop
+
+                    MouseArea {
+                      anchors.fill: parent
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: if (root.bar) root.bar.dismissNotificationRow({
+                        live: model.live === true,
+                        file: model.file || "",
+                        summary: model.summary || "",
+                        originalId: model.originalId,
+                        id: model.id,
+                        app: model.app || "",
+                        timestamp: model.timestamp
+                      })
+                    }
+                  }
+                }
+              }
+            }
+
+            Text {
+              anchors.centerIn: parent
+              text: "No notifications"
+              color: Color.muted
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+              visible: notifListModel.count === 0
+            }
           }
         }
       }
     }
   }
 
-
-// Quick-settings square: icon centered, tile reverse-fills with the accent
-// when active (icon swaps to the background color for contrast).
+  // Quick-settings square, strictly binary: off is the quiet surface, on is
+  // a full accent fill with the icon reversed for contrast. The transition
+  // animates; hover only lifts the fill slightly. There is no keyboard
+  // cursor — tiles answer to direct clicks and the global hotkeys.
   component ControlTile: Item {
     id: tile
 
     property string glyph: ""
     property string name: ""
     property bool active: false
-    property bool hasCursor: false
     property color foreground: Color.foreground
+    property real tileSize: Style.space(56)
     signal activated()
 
-    Layout.preferredWidth: Style.space(56)
-    Layout.preferredHeight: Style.space(56)
+    Layout.preferredWidth: tileSize
+    Layout.preferredHeight: tileSize
 
     BorderSurface {
       id: tileSurface
       anchors.fill: parent
       radius: Math.min(Style.cornerRadius, Style.space(6))
       color: tile.active ? Color.accent
-        : (tile.hasCursor || tileMouse.containsMouse
-           ? Qt.rgba(tile.foreground.r, tile.foreground.g, tile.foreground.b, 0.08)
-           : Qt.rgba(tile.foreground.r, tile.foreground.g, tile.foreground.b, 0.04))
-      borderSpec: Border.flat(tile.active ? Color.accent : (tile.hasCursor ? Color.accent : Qt.rgba(tile.foreground.r, tile.foreground.g, tile.foreground.b, 0.15)), 1)
+        : Qt.rgba(tile.foreground.r, tile.foreground.g, tile.foreground.b,
+            tileMouse.containsMouse ? 0.08 : 0.04)
+      borderSpec: Border.flat(tile.active ? Color.accent
+        : Qt.rgba(tile.foreground.r, tile.foreground.g, tile.foreground.b, 0.15), 1)
+
+      Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
       Text {
         anchors.centerIn: parent
         text: tile.glyph
         color: tile.active ? Color.background : tile.foreground
+
+        Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
         font.family: Style.font.family
         font.pixelSize: Style.font.iconLarge
       }
@@ -302,4 +519,4 @@ BarWidget {
       onClicked: tile.activated()
     }
   }
-  }
+}
