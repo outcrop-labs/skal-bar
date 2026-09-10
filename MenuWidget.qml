@@ -200,16 +200,21 @@ BarWidget {
 
       // Even spacing by construction: the gap between tiles equals the
       // card's edge inset (padding + border), and every section uses the
-      // same unit, so the card reads evenly padded whatever the theme's
-      // spacing scale does.
+      // same unit — the compact-menu padding the host's own tray menu uses,
+      // with the standard space(10) content inset between everything else.
       padding: Style.space(8)
       readonly property int edge: padding + Border.top(borderSpec)
       readonly property int tileGap: edge
       readonly property int tilesPerRow: 4
-      readonly property real tileWidth: (contentWidth - 2 * edge - (tilesPerRow - 1) * tileGap) / tilesPerRow
+      // All-integer tile geometry (Style.space rounds): the card is sized
+      // FROM the row, so no fractional-cell rounding can steal pixels from
+      // one side of the layout — every gap stays exactly `edge`.
+      readonly property int tileWidth: Style.space(72)
+      readonly property int rowWidth: tilesPerRow * tileWidth + (tilesPerRow - 1) * tileGap
 
-      contentWidth: Style.space(340)
+      contentWidth: rowWidth + 2 * edge
       contentHeight: Math.round(menuColumn.implicitHeight + 2 * edge)
+
 
       
       Item {
@@ -288,7 +293,8 @@ BarWidget {
 
           // ---- quick actions (1x4) ----------------------------------
           GridLayout {
-            Layout.fillWidth: true
+            id: controlsGrid
+            Layout.alignment: Qt.AlignHCenter
             columns: controlsCard.tilesPerRow
             columnSpacing: controlsCard.tileGap
             rowSpacing: controlsCard.tileGap
@@ -368,90 +374,127 @@ BarWidget {
               id: notifList
               anchors.fill: parent
               model: notifListModel
-              spacing: controlsCard.edge
+              spacing: 0
               boundsBehavior: Flickable.StopAtBounds
               clip: true
               ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-              delegate: Rectangle {
+              // Host menu grammar: transparent rows that fill on hover, a
+              // space(10) text inset, and 1px hairlines between rows.
+              delegate: Column {
                 width: notifList.width
-                height: notifRowLayout.implicitHeight + 2 * controlsCard.edge
-                radius: Math.min(Style.cornerRadius, Style.space(6))
-                color: Qt.rgba((root.bar ? root.bar.foreground : Color.foreground).r,
-                  (root.bar ? root.bar.foreground : Color.foreground).g,
-                  (root.bar ? root.bar.foreground : Color.foreground).b, 0.04)
+                spacing: 0
 
-                RowLayout {
-                  id: notifRowLayout
-                  anchors.fill: parent
-                  anchors.margins: controlsCard.edge
-                  spacing: controlsCard.edge
+                Item {
+                  width: parent.width
+                  implicitHeight: notifRowLayout.implicitHeight + 2 * Style.space(4)
 
-                  Text {
-                    text: model.glyph ? model.glyph : "󰂚"
-                    color: model.live === true ? Color.accent
-                      : (root.bar ? root.bar.foreground : Color.foreground)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.icon
-                    Layout.alignment: Qt.AlignTop
+                  Rectangle {
+                    anchors.fill: parent
+                    radius: Math.max(2, Style.cornerRadius)
+                    color: notifRowMouse.containsMouse
+                      ? Style.hoverFillFor(root.bar ? root.bar.foreground : Color.foreground,
+                          root.bar ? root.bar.foreground : Color.foreground)
+                      : "transparent"
                   }
 
-                  ColumnLayout {
-                    spacing: 0
-                    Layout.fillWidth: true
+                  MouseArea {
+                    id: notifRowMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                  }
 
-                    RowLayout {
-                      spacing: Style.space(6)
+                  RowLayout {
+                    id: notifRowLayout
+                    anchors.fill: parent
+                    anchors.leftMargin: Style.space(10)
+                    anchors.rightMargin: Style.space(10)
+                    spacing: Style.space(10)
+
+                    Text {
+                      text: model.glyph ? model.glyph : "󰂚"
+                      color: model.live === true ? Color.accent
+                        : (root.bar ? root.bar.foreground : Color.foreground)
+                      font.family: Style.font.family
+                      font.pixelSize: Style.font.icon
+                      Layout.alignment: Qt.AlignTop
+                    }
+
+                    ColumnLayout {
+                      spacing: 0
                       Layout.fillWidth: true
-                      Text {
-                        text: model.summary || ""
-                        color: root.bar ? root.bar.foreground : Color.foreground
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.body
-                        elide: Text.ElideRight
+
+                      RowLayout {
+                        spacing: Style.space(6)
                         Layout.fillWidth: true
+                        Text {
+                          text: model.summary || ""
+                          color: root.bar ? root.bar.foreground : Color.foreground
+                          font.family: Style.font.family
+                          font.pixelSize: Style.font.body
+                          elide: Text.ElideRight
+                          Layout.fillWidth: true
+                        }
+                        Text {
+                          text: root.relativeTime(model.timestamp)
+                          color: Color.muted
+                          font.family: Style.font.family
+                          font.pixelSize: Style.font.caption
+                        }
                       }
+
                       Text {
-                        text: root.relativeTime(model.timestamp)
+                        text: model.body || ""
                         color: Color.muted
                         font.family: Style.font.family
-                        font.pixelSize: Style.font.caption
+                        font.pixelSize: Style.font.bodySmall
+                        wrapMode: Text.WrapAnywhere
+                        elide: Text.ElideRight
+                        maximumLineCount: 2
+                        visible: text !== ""
+                        Layout.fillWidth: true
                       }
                     }
 
                     Text {
-                      text: model.body || ""
+                      text: "󰅖"
                       color: Color.muted
                       font.family: Style.font.family
-                      font.pixelSize: Style.font.bodySmall
-                      wrapMode: Text.WrapAnywhere
-                      elide: Text.ElideRight
-                      maximumLineCount: 2
-                      visible: text !== ""
-                      Layout.fillWidth: true
+                      font.pixelSize: Style.font.iconSmall
+                      Layout.alignment: Qt.AlignTop
+
+                      MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: if (root.bar) root.bar.dismissNotificationRow({
+                          live: model.live === true,
+                          file: model.file || "",
+                          summary: model.summary || "",
+                          originalId: model.originalId,
+                          id: model.id,
+                          app: model.app || "",
+                          timestamp: model.timestamp
+                        })
+                      }
                     }
                   }
 
-                  Text {
-                    text: "󰅖"
-                    color: Color.muted
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.iconSmall
-                    Layout.alignment: Qt.AlignTop
+                }
 
-                    MouseArea {
-                      anchors.fill: parent
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: if (root.bar) root.bar.dismissNotificationRow({
-                        live: model.live === true,
-                        file: model.file || "",
-                        summary: model.summary || "",
-                        originalId: model.originalId,
-                        id: model.id,
-                        app: model.app || "",
-                        timestamp: model.timestamp
-                      })
-                    }
+                Item {
+                  visible: index < notifListModel.count - 1
+                  width: parent.width
+                  implicitHeight: Style.space(11)
+
+                  Rectangle {
+                    anchors.left: parent.left
+                    anchors.leftMargin: Style.space(10)
+                    anchors.right: parent.right
+                    anchors.rightMargin: Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: 1
+                    color: Color.popups.border
+                    opacity: 0.45
                   }
                 }
               }
