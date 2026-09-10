@@ -299,14 +299,43 @@ Item {
     setBarPosition(edge)
   }
 
+  // Omarchy 4.0.3's scoped shell API can refuse config mutations for
+  // third-party bars (its capability gate returns false), which silently
+  // no-ops drags and toggles. Try the API first; when it refuses, write
+  // shell.json directly — the host watches the file and applies it live,
+  // which also re-renders this bar through the normal config reload.
+  property var shellConfigDoc: ({})
+
+  FileView {
+    id: barShellConfigFile
+    printErrors: false
+    watchChanges: true
+    atomicWrites: true
+    path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
+    onFileChanged: reload()
+    onLoaded: {
+      try { root.shellConfigDoc = JSON.parse(text()) } catch (e) { /* keep last good */ }
+    }
+    onLoadFailed: root.shellConfigDoc = ({})
+  }
+
+  function mutateShell(fn) {
+    if (root.shell && typeof root.shell.mutateShellConfig === "function"
+        && root.shell.mutateShellConfig(fn)) return true
+    if (!Util.isPlainObject(root.shellConfigDoc) || !Util.isPlainObject(root.shellConfigDoc.bar)) return false
+    var next = JSON.parse(JSON.stringify(root.shellConfigDoc))
+    fn(next)
+    next.version = 1
+    barShellConfigFile.setText(JSON.stringify(next, null, 2) + "\n")
+    return true
+  }
+
   function setBarPosition(value) {
     var next = normalizePosition(value)
-    if (root.shell && typeof root.shell.mutateShellConfig === "function") {
-      root.shell.mutateShellConfig(function(config) {
-        if (!Util.isPlainObject(config.bar)) config.bar = {}
-        config.bar.position = next
-      })
-    } else {
+    if (!mutateShell(function(config) {
+      if (!Util.isPlainObject(config.bar)) config.bar = {}
+      config.bar.position = next
+    })) {
       root.position = next
     }
   }
@@ -865,12 +894,10 @@ Item {
 
   function toggleTransparency() {
     var nextTransparent = !(root.requestedTransparent === true)
-    if (root.shell && typeof root.shell.mutateShellConfig === "function") {
-      root.shell.mutateShellConfig(function(config) {
-        if (!Util.isPlainObject(config.bar)) config.bar = {}
-        config.bar.transparent = nextTransparent
-      })
-    } else {
+    if (!mutateShell(function(config) {
+      if (!Util.isPlainObject(config.bar)) config.bar = {}
+      config.bar.transparent = nextTransparent
+    })) {
       root.setRequestedTransparency(nextTransparent)
     }
   }
@@ -931,10 +958,9 @@ Item {
   function dropBarModule(source, toRegion, beforeName) {
     if (!source || !source.region || !source.moduleName || !toRegion) return false
     if (source.region === toRegion && source.moduleName === beforeName) return false
-    if (!root.shell || typeof root.shell.mutateShellConfig !== "function") return false
 
     var changed = false
-    root.shell.mutateShellConfig(function(config) {
+    mutateShell(function(config) {
       changed = moveModuleInConfig(config, source.region, source.moduleName, toRegion, beforeName)
     })
     return changed

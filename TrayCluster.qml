@@ -212,8 +212,8 @@ Item {
 
   function persistTrayState(pinned, hidden) {
     var hostBar = root.bar
-    if (!hostBar || !hostBar.shell || typeof hostBar.shell.mutateShellConfig !== "function") return
-    hostBar.shell.mutateShellConfig(function(config) {
+    if (!hostBar || typeof hostBar.mutateShell !== "function") return
+    hostBar.mutateShell(function(config) {
       if (!Util.isPlainObject(config.bar)) config.bar = {}
       config.bar.tray = { pinned: pinned, hidden: hidden }
     })

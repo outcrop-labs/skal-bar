@@ -69,6 +69,7 @@ Item {
     id: shellConfigFile
     printErrors: false
     watchChanges: true
+    atomicWrites: true
     path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
     // text() is stale inside the change signal — route through reload() so
     // onLoaded always parses fresh content.
@@ -84,7 +85,6 @@ Item {
 
   function open(payloadJson) {
     root.opened = true
-    regenerateTintedLogo()
   }
 
   function close() {
@@ -98,8 +98,16 @@ Item {
   // ---- config helpers ----------------------------------------------------
 
   function mutate(fn) {
-    if (!shell || typeof shell.mutateShellConfig !== "function") return
-    shell.mutateShellConfig(fn)
+    if (shell && typeof shell.mutateShellConfig === "function" && shell.mutateShellConfig(fn)) return
+    // Omarchy 4.0.3's scoped shell API can refuse config mutations for
+    // third-party bars (its capability gate returns false) — write
+    // shell.json directly instead; the host watches the file and applies it
+    // live, and our own FileView reload keeps the panel in sync.
+    if (!Util.isPlainObject(root.configDoc) || !Util.isPlainObject(root.configDoc.bar)) return
+    var next = JSON.parse(JSON.stringify(root.configDoc))
+    fn(next)
+    next.version = 1
+    shellConfigFile.setText(JSON.stringify(next, null, 2) + "\n")
   }
 
   function barObj(config) {
@@ -483,7 +491,7 @@ Item {
       + 's/__KEEP__/none/g'
     tintProc.pendingPath = "~/.cache/skal-bar/logo." + color.replace("#", "") + ".svg"
     tintProc.command = ["bash", "-c",
-      "mkdir -p '" + home + "/.cache/skal-bar' && rm -f '" + home + "'/.cache/skal-bar/logo*.svg && sed -E '" + script + "' '" + src + "' > '" + cache + "'"]
+      "mkdir -p '" + home + "/.cache/skal-bar' && sed -E '" + script + "' '" + src + "' > '" + cache + "'"]
     tintProc.running = true
   }
 
