@@ -876,9 +876,14 @@ Item {
   }
 
   // Right-click on blank bar space / SUPER+B: summon or dismiss the settings
-  // panel declared in this plugin's manifest (kind "panel").
+  // panel declared in this plugin's manifest (kind "panel"). The scoped shell
+  // API the host injects can be destroyed under us by the host's plugin-API
+  // pruning (Omarchy 4.0.3), so when it is missing or refuses, fall back to
+  // the host CLI toggle.
   function openSettingsPanel() {
-    if (root.shell && typeof root.shell.toggle === "function") root.shell.toggle("skal.bar")
+    if (root.shell && typeof root.shell.toggle === "function" && root.shell.toggle("skal.bar")) return
+    console.warn("skal.bar: shell API toggle unavailable, falling back to host IPC")
+    Util.execArgv(["omarchy-shell", "shell", "toggle", "skal.bar"])
   }
 
   function rawLayoutSection(config, region) {
