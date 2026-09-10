@@ -57,7 +57,27 @@ Item {
   property real chipDragWidth: 0
   property real chipDragHeight: 0
 
-  readonly property var cfg: shell && Util.isPlainObject(shell.barConfig) ? shell.barConfig : ({})
+  // Live config read straight from shell.json. The host persists every
+  // mutation immediately, and this round trip preserves nested arrays — the
+  // injected shell API's barConfig snapshot flattens them on Omarchy 4.0.3.
+  // Writes still go through shell.mutateShellConfig, whose mutator runs
+  // host-side against the real config object.
+  property var configDoc: ({})
+  readonly property var cfg: Util.isPlainObject(configDoc.bar) ? configDoc.bar : ({})
+
+  FileView {
+    id: shellConfigFile
+    printErrors: false
+    watchChanges: true
+    path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
+    // text() is stale inside the change signal — route through reload() so
+    // onLoaded always parses fresh content.
+    onFileChanged: reload()
+    onLoaded: {
+      try { root.configDoc = JSON.parse(text()) } catch (e) { /* keep last good */ }
+    }
+    onLoadFailed: root.configDoc = ({})
+  }
   readonly property int cardWidth: 900
   readonly property color text: Color.popups.text
   readonly property color textDim: Qt.darker(Color.popups.text, 1.4)

@@ -234,6 +234,23 @@ rm -rf "$HOME/.cache/quickshell/qmlcache" "$HOME/.cache/quickshell"/qtpipelineca
 omarchy restart shell
 ```
 
+### Settings panel shows defaults / controls do nothing
+
+The panel reads live state from the `shell` API object the host injects into it.
+On Omarchy 4.0.3 that object can be destroyed by the host's plugin-API pruning
+while the panel still holds it (observed at cold start and after any plugin
+reload) — the bar itself keeps working because it re-requests a fresh object on
+every reload, but an already-loaded panel is never re-injected, so it renders
+defaults and every control no-ops. Your `shell.json` is untouched; reopening
+the panel is not enough because the same dead instance stays loaded.
+
+That is why this plugin ships `"keepLoaded": false`: the settings panel is
+(re)created each time it is summoned, and every creation gets a freshly
+injected, current `shell` object — the same recovery path the bar uses. The
+trade-off is that panel-internal state (selected tab) resets between opens.
+If a future Omarchy release re-injects or stops destroying live shell APIs,
+`keepLoaded` can go back to `true`.
+
 ## Credits
 
 Derived from the [Omarchy](https://omarchy.org) shell's bar and tray plugins
