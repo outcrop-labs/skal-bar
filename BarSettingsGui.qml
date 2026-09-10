@@ -98,11 +98,11 @@ Item {
   // ---- config helpers ----------------------------------------------------
 
   function mutate(fn) {
-    if (shell && typeof shell.mutateShellConfig === "function" && shell.mutateShellConfig(fn)) return
-    // Omarchy 4.0.3's scoped shell API can refuse config mutations for
-    // third-party bars (its capability gate returns false) — write
-    // shell.json directly instead; the host watches the file and applies it
-    // live, and our own FileView reload keeps the panel in sync.
+    // Omarchy 4.0.3's scoped shell API can refuse third-party config
+    // mutations, and when it applies them they land in memory only — the
+    // host's persist step silently never writes shell.json, so this panel
+    // (which reads the file) would never see the change. Write shell.json
+    // directly; the host watches the file and applies it live.
     if (!Util.isPlainObject(root.configDoc) || !Util.isPlainObject(root.configDoc.bar)) return
     var next = JSON.parse(JSON.stringify(root.configDoc))
     fn(next)

@@ -299,11 +299,12 @@ Item {
     setBarPosition(edge)
   }
 
-  // Omarchy 4.0.3's scoped shell API can refuse config mutations for
-  // third-party bars (its capability gate returns false), which silently
-  // no-ops drags and toggles. Try the API first; when it refuses, write
-  // shell.json directly — the host watches the file and applies it live,
-  // which also re-renders this bar through the normal config reload.
+  // Omarchy 4.0.3 has two host-side config bugs: the scoped shell API can
+  // refuse third-party mutations outright, and when it does apply them they
+  // land in memory only — the host's persist step (userConfigFile.setText)
+  // silently never writes shell.json. So this plugin treats shell.json as
+  // the source of truth and writes it directly; the host watches the file
+  // and applies changes live, which re-renders this bar on its own.
   property var shellConfigDoc: ({})
 
   FileView {
@@ -320,8 +321,6 @@ Item {
   }
 
   function mutateShell(fn) {
-    if (root.shell && typeof root.shell.mutateShellConfig === "function"
-        && root.shell.mutateShellConfig(fn)) return true
     if (!Util.isPlainObject(root.shellConfigDoc) || !Util.isPlainObject(root.shellConfigDoc.bar)) return false
     var next = JSON.parse(JSON.stringify(root.shellConfigDoc))
     fn(next)
@@ -2324,7 +2323,7 @@ Item {
       property bool suppressClick: false
       property real pressedX: 0
       property real pressedY: 0
-      readonly property bool canReorder: root.shell && typeof root.shell.mutateShellConfig === "function"
+      readonly property bool canReorder: Util.isPlainObject(root.shellConfigDoc.bar)
       readonly property real dragThreshold: Style.space(4)
 
       anchors.fill: parent
