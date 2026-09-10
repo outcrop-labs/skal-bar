@@ -1,4 +1,4 @@
-# skal.bar
+# skål.bar
 
 I love the stripped-down feel of the default Omarchy bar: a thin, quiet strip that stays out of the way. But I kept running into its limits — I wanted to tuck more of it away, tune how it looks and sits on the screen, and interact with it rather than just read it. So I built the bar I wanted on top of it.
 
