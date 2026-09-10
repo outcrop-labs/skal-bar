@@ -1585,7 +1585,7 @@ FormRow {
     // Bar-style drop resolution: the chip whose nearer edge is closest to
     // the pointer wins, with a before/after flag from edge distances; the
     // pointer's flow row only counts chips it overlaps vertically.
-    function dropBeforeId(sceneX, sceneY) {
+    function dropTarget(sceneX, sceneY) {
       var chips = zone.chipItems()
       var best = null
       var bestDistance = Infinity
@@ -1600,15 +1600,38 @@ FormRow {
         var after = afterDistance < beforeDistance
         var distance = (after ? afterDistance : beforeDistance) + rowOffset
         if (distance < bestDistance) {
-          best = { after: after }
+          best = { chip: chip, after: after }
           bestDistance = distance
           bestIndex = i
         }
       }
-      if (bestIndex === -1) return ""
-      if (!best.after) return chips[bestIndex].entry.id
-      var next = chips[bestIndex + 1]
+      return bestIndex === -1 ? null : best
+    }
+
+    function dropBeforeId(sceneX, sceneY) {
+      var target = zone.dropTarget(sceneX, sceneY)
+      if (!target) return ""
+      if (!target.after) return target.chip.entry.id
+      var chips = zone.chipItems()
+      var next = chips[chips.indexOf(target.chip) + 1]
       return next ? next.entry.id : ""
+    }
+
+    // Insertion marker matching the bar's drop line: a thin rounded accent
+    // bar at the resolved chip edge, centered in the flow's chip gap.
+    readonly property var dropMarkerRect: {
+      if (!zone.dropHot) return null
+      var target = zone.dropTarget(root.chipDragSceneX, root.chipDragSceneY)
+      if (!target) return null
+      var p = target.chip.mapToItem(zone, 0, 0)
+      var gap = zoneFlow.spacing / 2
+      var x = target.after ? p.x + target.chip.width + gap : p.x - gap
+      return {
+        x: Math.max(0, Math.min(x, zone.width - Style.spacing.xs)),
+        y: p.y,
+        width: Style.spacing.xs,
+        height: target.chip.height
+      }
     }
 
     // Content-driven size. A Flow with an explicit width can never report
@@ -1642,6 +1665,18 @@ FormRow {
       color: zone.dropHot
         ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.16)
         : "transparent"
+    }
+
+    Rectangle {
+      readonly property var marker: zone.dropMarkerRect
+
+      visible: marker !== null
+      x: marker ? marker.x : 0
+      y: marker ? marker.y : 0
+      width: marker ? marker.width : 0
+      height: marker ? marker.height : 0
+      color: Color.accent
+      radius: Math.min(width, height) / 2
     }
 
     Flow {
