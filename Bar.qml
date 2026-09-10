@@ -326,6 +326,9 @@ Item {
     fn(next)
     next.version = 1
     barShellConfigFile.setText(JSON.stringify(next, null, 2) + "\n")
+    // The FileView watcher does not fire for our own setText writes — adopt
+    // the new document so the next mutation starts from current state.
+    root.shellConfigDoc = next
     return true
   }
 

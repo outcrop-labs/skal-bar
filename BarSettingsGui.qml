@@ -108,6 +108,10 @@ Item {
     fn(next)
     next.version = 1
     shellConfigFile.setText(JSON.stringify(next, null, 2) + "\n")
+    // The FileView watcher does not fire for our own setText writes — adopt
+    // the new document immediately so the panel re-renders without waiting
+    // for an external file event.
+    root.configDoc = next
   }
 
   function barObj(config) {
