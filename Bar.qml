@@ -1327,6 +1327,9 @@ Item {
   property var weatherReport: null
   property real weatherAt: 0
   property var weatherLocation: ({ name: "", latitude: null, longitude: null })
+  // Third-party weather response bound: curl stops mid-stream at this size and
+  // the collector rejects anything larger before JSON.parse.
+  readonly property int weatherMaxBytes: 262144
 
   readonly property string notificationsStateDir: stateHome + "/omarchy/notifications"
   readonly property string notificationsHistoryDir: notificationsStateDir + "/history"
@@ -1569,17 +1572,22 @@ Item {
 
   Process {
     id: weatherProc
-    command: ["curl", "-fsS", "--max-time", "8", "https://wttr.in/"
+    command: ["curl", "-fsS", "--max-time", "8", "--max-filesize",
+      String(root.weatherMaxBytes), "https://wttr.in/"
       + WeatherModel.wttrLocationQuery(root.weatherLocation.name, root.weatherLocation.latitude,
           root.weatherLocation.longitude)
       + "?format=j1"]
     // wttr.in answers with pretty-printed multi-line JSON, so collect the
-    // whole response rather than parse per line.
+    // whole response rather than parse per line. It is untrusted third-party
+    // input in a long-lived process: --max-filesize stops curl mid-stream,
+    // and curl < 7.84 ignores that flag without a content-length, so the
+    // length guard below rejects oversized bodies before JSON.parse.
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
         var raw = String(text || "").trim()
         if (raw.indexOf("{") !== 0) return
+        if (raw.length > root.weatherMaxBytes) return
         try {
           root.weatherReport = JSON.parse(raw)
           root.weatherAt = Date.now()
