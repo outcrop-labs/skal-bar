@@ -253,12 +253,14 @@ BarWidget {
                   Layout.fillWidth: true
                   Text {
                     text: root.bar ? root.bar.weatherTemp : ""
+                    textFormat: Text.PlainText
                     color: root.bar ? root.bar.foreground : Color.foreground
                     font.family: Style.font.family
                     font.pixelSize: Style.font.title
                   }
                   Text {
                     text: root.bar ? root.bar.weatherCondition : ""
+                    textFormat: Text.PlainText
                     color: Color.muted
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
@@ -267,6 +269,7 @@ BarWidget {
                   }
                   Text {
                     text: root.bar ? root.bar.weatherPlace : ""
+                    textFormat: Text.PlainText
                     color: Color.muted
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
@@ -276,6 +279,7 @@ BarWidget {
                 }
                 Text {
                   text: [root.bar ? root.bar.weatherWind : ""].filter(function(part) { return part !== "" }).join("  ·  ")
+                  textFormat: Text.PlainText
                   color: Color.muted
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
@@ -429,6 +433,7 @@ BarWidget {
                         Layout.fillWidth: true
                         Text {
                           text: model.summary || ""
+                          textFormat: Text.PlainText
                           color: root.bar ? root.bar.foreground : Color.foreground
                           font.family: Style.font.family
                           font.pixelSize: Style.font.body
@@ -445,6 +450,7 @@ BarWidget {
 
                       Text {
                         text: model.body || ""
+                        textFormat: Text.PlainText
                         color: Color.muted
                         font.family: Style.font.family
                         font.pixelSize: Style.font.bodySmall

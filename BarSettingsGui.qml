@@ -494,8 +494,12 @@ Item {
       + 's/stroke="[^"]*"/stroke="' + color + '"/g; '
       + 's/__KEEP__/none/g'
     tintProc.pendingPath = "~/.cache/skal-bar/logo." + color.replace("#", "") + ".svg"
+    // Fixed shell program, zero interpolation: the sed script, the picked
+    // source path and the cache paths all arrive as positional parameters,
+    // so a quote or a semicolon in a chosen filename stays data.
     tintProc.command = ["bash", "-c",
-      "mkdir -p '" + home + "/.cache/skal-bar' && sed -E '" + script + "' '" + src + "' > '" + cache + "'"]
+      'mkdir -p "$3" && sed -E "$1" "$2" > "$4"',
+      "skal-tint", script, src, home + "/.cache/skal-bar", cache]
     tintProc.running = true
   }
 

@@ -585,6 +585,7 @@ BarWidget {
             anchors.right: parent.right
             anchors.rightMargin: Style.space(10)
             text: root.currentTitle
+            textFormat: Text.PlainText
             color: root.foreground
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
