@@ -1330,6 +1330,15 @@ Item {
   // Third-party weather response bound: curl stops mid-stream at this size and
   // the collector rejects anything larger before JSON.parse.
   readonly property int weatherMaxBytes: 262144
+  // Notification files are third-party application data. Bound before parse:
+  // 24 records, 8 KiB per file, 192 KiB aggregate, 256 dirents per directory,
+  // 2s process deadline, and the same 192 KiB output cap in the collector.
+  readonly property int notificationMaxRows: 24
+  readonly property int notificationMaxFileBytes: 8192
+  readonly property int notificationMaxTotalBytes: 196608
+  readonly property int notificationMaxScan: 256
+  readonly property int notificationProcTimeout: 2
+
 
   readonly property string notificationsStateDir: stateHome + "/omarchy/notifications"
   readonly property string notificationsHistoryDir: notificationsStateDir + "/history"
@@ -1443,24 +1452,66 @@ Item {
 
   Process {
     id: notificationListProc
-    command: ["bash", "-c",
-      "shopt -s nullglob\n" +
+    // Rank live then history by mtime without reading bodies, keep 24 files
+    // that pass size caps, then parse only those. timeout(2) is the deadline.
+    command: ["timeout", "--signal=KILL", String(root.notificationProcTimeout), "bash", "-c",
+      "set +e\n" +
+      "MAX_ROWS=" + String(root.notificationMaxRows) + "\n" +
+      "MAX_FILE=" + String(root.notificationMaxFileBytes) + "\n" +
+      "MAX_TOTAL=" + String(root.notificationMaxTotalBytes) + "\n" +
+      "MAX_SCAN=" + String(root.notificationMaxScan) + "\n" +
+      "MAX_OUT=" + String(root.notificationMaxTotalBytes) + "\n" +
       "pop=\"$HOME/.local/state/omarchy/notifications\"\n" +
       "hist=\"$pop/history\"\n" +
-      "live=$(jq -cs 'map(.live = true | .file = input_filename)' \"$pop\"/*.json 2>/dev/null)\n" +
-      "past=$(jq -cs 'map(.file = input_filename)' \"$hist\"/*.json 2>/dev/null)\n" +
-      "prog='$a + $b | sort_by(-(.timestamp // 0)) | .[0:24]'\n" +
-      "jq -cn --argjson a \"${live:-[]}\" --argjson b \"${past:-[]}\" \"$prog\""]
-    stdout: SplitParser {
-      onRead: function(line) {
-        var raw = String(line).trim()
+      "sel=(); flags=(); total=0\n" +
+      "list() { find \"$1\" -maxdepth 1 -type f -name '*.json' -printf '%T@\\t%s\\t%p\\n' 2>/dev/null | head -n \"$MAX_SCAN\" | sort -nr; }\n" +
+      "pick() {\n" +
+      "  local live=\"$1\"\n" +
+      "  while IFS=$'\\t' read -r _mtime size path; do\n" +
+      "    [ \"${#sel[@]}\" -lt \"$MAX_ROWS\" ] || return 0\n" +
+      "    [ -n \"$path\" ] || continue\n" +
+      "    case \"$size\" in (\"\"|*[!0-9]*) continue ;; esac\n" +
+      "    [ \"$size\" -le \"$MAX_FILE\" ] || continue\n" +
+      "    [ $((total + size)) -le \"$MAX_TOTAL\" ] || continue\n" +
+      "    sel+=(\"$path\"); flags+=(\"$live\"); total=$((total + size))\n" +
+      "  done\n" +
+      "}\n" +
+      "pick 1 < <(list \"$pop\")\n" +
+      "pick 0 < <(list \"$hist\")\n" +
+      "if [ \"${#sel[@]}\" -eq 0 ]; then printf '%s\\n' '[]'; exit 0; fi\n" +
+      "i=0; parts=()\n" +
+      "for path in \"${sel[@]}\"; do\n" +
+      "  obj=$(jq -c --arg f \"$path\" --argjson live \"${flags[i]}\" 'select(type==\"object\") | . + {file:$f, live:($live==1)}' \"$path\" 2>/dev/null)\n" +
+      "  i=$((i+1))\n" +
+      "  [ -n \"$obj\" ] || continue\n" +
+      "  parts+=(\"$obj\")\n" +
+      "done\n" +
+      "if [ \"${#parts[@]}\" -eq 0 ]; then printf '%s\\n' '[]'; exit 0; fi\n" +
+      "out=$(printf '%s\\n' \"${parts[@]}\" | jq -cs 'sort_by(-(.timestamp // 0))')\n" +
+      "blen=$(printf '%s' \"$out\" | wc -c)\n" +
+      "[ \"$blen\" -le \"$MAX_OUT\" ] || exit 0\n" +
+      "printf '%s\\n' \"$out\""]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var raw = String(text || "").trim()
         if (raw.indexOf("[") !== 0) return
-        try { root.applyNotificationRows(JSON.parse(raw)) } catch (e) {}
+        if (raw.length > root.notificationMaxTotalBytes) return
+        try {
+          var rows = JSON.parse(raw)
+          if (!(rows instanceof Array)) return
+          if (rows.length > root.notificationMaxRows)
+            rows = rows.slice(0, root.notificationMaxRows)
+          root.applyNotificationRows(rows)
+        } catch (e) {}
       }
     }
   }
 
   function applyNotificationRows(rows) {
+    if (!(rows instanceof Array)) return
+    if (rows.length > root.notificationMaxRows)
+      rows = rows.slice(0, root.notificationMaxRows)
     var kept = []
     var seen = ({})
     for (var i = 0; i < rows.length; i++) {
