@@ -796,6 +796,7 @@ Item {
             ColumnLayout {
               id: appearancePane
               visible: root.currentTab === 0
+              enabled: root.currentTab === 0
               Layout.fillWidth: true
               spacing: Style.space(16)
 
@@ -883,6 +884,9 @@ Item {
 
                 TextField {
                   width: Style.space(26)
+                  // Hidden tabs keep no editable field: a foreign clipboard
+                  // offer must not reach a live TextInput off screen.
+                  readOnly: root.currentTab !== 0
                   text: root.cfgStr("backgroundColor", "")
                   placeholderText: "theme"
                   font.family: Style.font.family
@@ -953,6 +957,7 @@ Item {
             ColumnLayout {
               id: widgetsPane
               visible: root.currentTab === 1
+              enabled: root.currentTab === 1
               Layout.fillWidth: true
               spacing: Style.space(16)
 
@@ -1156,6 +1161,7 @@ FormRow {
             ColumnLayout {
               id: logoPane
               visible: root.currentTab === 2
+              enabled: root.currentTab === 2
               Layout.fillWidth: true
               spacing: Style.space(16)
 
@@ -1313,6 +1319,7 @@ FormRow {
 
                 TextField {
                   width: Style.space(26)
+                  readOnly: root.currentTab !== 2
                   text: root.logoVal("logo", "")
                   placeholderText: "default mark"
                   font.family: Style.font.family
@@ -1402,6 +1409,7 @@ FormRow {
 
                 TextField {
                   Layout.fillWidth: true
+                  readOnly: root.currentTab !== 2 || root.logoMode() !== "image"
                   text: root.logoVal("logoImage", "")
                   placeholderText: "~/path/to/logo.png"
                   font.family: Style.font.family
@@ -1487,6 +1495,7 @@ FormRow {
                 TextField {
                   id: logoHexField
                   Layout.fillWidth: true
+                  readOnly: root.currentTab !== 2 || logoColorDD.value !== "#custom"
                   readonly property string current: root.logoVal("logoColor", "")
                   text: /^#[0-9A-Fa-f]{6}$/.test(current) ? current : ""
                   placeholderText: "#rrggbb"

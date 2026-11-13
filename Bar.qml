@@ -1628,8 +1628,13 @@ Item {
     if (!row) return
     // Live toasts close through the host, landing in history under the same
     // key; history has no removal IPC, so a dismissed row stays hidden here.
-    if (row.live === true && row.summary)
-      Util.execArgv(["omarchy-shell", "-q", "notifications", "dismiss", String(row.summary)])
+    // The summary never lands in a process argument, where another local
+    // user could read it: it goes to the helper over stdin, and the helper
+    // speaks to the shell's own IPC socket (scripts/dismiss-toast).
+    if (row.live === true && row.summary) {
+      liveToastDismissProc.pendingSummary = String(row.summary)
+      liveToastDismissProc.running = true
+    }
     hideNotificationKeys([notificationRowKey(row)])
   }
 
@@ -1644,6 +1649,20 @@ Item {
   function persistHiddenNotificationKeys() {
     var keys = Object.keys(hiddenNotificationKeys).slice(-400)
     dismissedNotificationsFile.setText(JSON.stringify(keys) + "\n")
+  }
+
+  // Closes a live toast without its summary passing through a process
+  // argument. The helper is a fixed program; only the summary is dynamic,
+  // and it travels over stdin (see scripts/dismiss-toast).
+  Process {
+    id: liveToastDismissProc
+    command: [Qt.resolvedUrl("scripts/dismiss-toast").toString().replace(/^file:\/\//, "")]
+    stdinEnabled: true
+    property string pendingSummary: ""
+    onStarted: {
+      write(pendingSummary + "\n")
+      pendingSummary = ""
+    }
   }
 
   FileView {

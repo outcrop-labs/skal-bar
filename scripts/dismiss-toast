@@ -1,0 +1,16 @@
+#!/bin/bash
+# Closes a live notification toast by summary without the summary ever
+# appearing in a process argument, where another local user could read it.
+# The summary arrives on stdin; the dismiss request travels the shell's own
+# IPC socket, framed the way omarchy-shell's socat fast path frames it
+# (fields joined by record separators, the request ended by a unit
+# separator). Best effort throughout: the caller hides its row regardless.
+IFS= read -r summary
+[[ -n $summary ]] || exit 0
+[[ $summary == *$'\037'* || $summary == *$'\036'* ]] && exit 0
+id=$(printf '%s\n%s' "$OMARCHY_PATH/shell" "${WAYLAND_DISPLAY:-}" | md5sum)
+socket="${XDG_RUNTIME_DIR:-/run/user/$UID}/omarchy-shell-${id:0:16}.sock"
+[[ -S $socket ]] || exit 0
+printf 'notifications\037dismiss\037%s\036' "$summary" \
+  | timeout --kill-after=1s 2s socat -t 86400 - "UNIX-CONNECT:$socket" >/dev/null 2>&1
+exit 0
