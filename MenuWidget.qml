@@ -179,7 +179,18 @@ BarWidget {
     // per-instance handler here would race the other monitors' copies.
     manageIpc: false
 
+    // Counted on the bar so its quick-state poll runs only while a panel
+    // (on any monitor) is open.
+    property bool countedOpen: false
+    function setCounted(on) {
+      if (!root.bar || on === countedOpen) return
+      countedOpen = on
+      root.bar.quickPanelsOpen = Math.max(0, root.bar.quickPanelsOpen + (on ? 1 : -1))
+    }
+    Component.onDestruction: setCounted(false)
+
     onOpenedChanged: {
+      setCounted(opened)
       if (opened) {
         controlsKeyCatcher.forceActiveFocus()
         if (root.bar) {
@@ -428,6 +439,7 @@ BarWidget {
                     spacing: Style.space(10)
 
                     Text {
+                      textFormat: Text.PlainText
                       text: model.glyph ? model.glyph : "󰂚"
                       color: model.live === true ? Color.accent
                         : (root.bar ? root.bar.foreground : Color.foreground)
@@ -485,11 +497,9 @@ BarWidget {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: if (root.bar) root.bar.dismissNotificationRow({
+                          key: model.key || "",
                           live: model.live === true,
-                          file: model.file || "",
                           summary: model.summary || "",
-                          originalId: model.originalId,
-                          id: model.id,
                           app: model.app || "",
                           timestamp: model.timestamp
                         })

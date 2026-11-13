@@ -70,7 +70,7 @@ Remove the keybind from `~/.config/hypr/bindings.lua` if added.
 
 ## Dependencies
 
-- [zenity](https://gitlab.gnome.org/GNOME/zenity) (optional) — OS file picker for the logo browser: `sudo pacman -S zenity`. Without it, type the SVG path manually.
+- [zenity](https://gitlab.gnome.org/GNOME/zenity) (optional) — OS file picker for the logo browser; install the `zenity` package. Without it, type the image path manually.
 
 ## Config
 
@@ -185,7 +185,9 @@ The menu trigger is more than a launcher. Left-click opens the quick menu anchor
 | Right-click | The Omarchy menu |
 | Middle-click | A terminal |
 
-Toggle state never rides the host's scoped shell API — Omarchy 4.0.3 can destroy it mid-session, which used to leave the tiles dead. The bar reads the same files the host itself persists and watches (DND from `notifications.json`, stay-awake from the indicators flag file) plus one-shot probes for the state that lives in daemons (night light in hyprsunset, dictation in voxtype), and applies toggles through the live service when it's there with the `omarchy` CLI as fallback.
+Toggle state never rides the host's scoped shell API — Omarchy 4.0.3 can destroy it mid-session, which used to leave the tiles dead. The bar reads the same files the host itself persists (DND from `notifications/quiet.json`, the list from `notifications/live.json` and `history.json`, stay-awake from the indicators flag file) plus probes for the state that lives in daemons (night light in hyprsunset, dictation in voxtype). While the panel is open it re-probes every 1.5 s, so changes from hotkeys or the CLI show without reopening it. Toggles apply through the live service when it's there, with the `omarchy` CLI as fallback.
+
+History has no removal API, so dismissing a history row hides it in the panel (persisted in `~/.local/state/skal-bar/`) until Omarchy ages it out after 24 hours. Dismissing a live toast closes it.
 
 Tiles answer to direct clicks and the global hotkeys — there is no in-panel keyboard navigation. `Esc` closes the menu. See [Hotkeys](#hotkeys) for opening the panel and binding the individual tiles.
 
