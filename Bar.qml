@@ -1412,18 +1412,16 @@ Item {
   // Third-party weather response bound: curl stops mid-stream at this size and
   // the collector rejects anything larger before JSON.parse.
   readonly property int weatherMaxBytes: 262144
-  // Notification files are third-party application data. Bound before parse:
-  // 24 records, 8 KiB per file, 192 KiB aggregate, 256 dirents per directory,
-  // 2s process deadline, and the same 192 KiB output cap in the collector.
+  // Notification rows are third-party application data. Bound before parse:
+  // the host caps live.json at 100 rows of 16 KiB and history.json at 100
+  // rows of 4 KiB, so anything past these sizes is not the host's file.
+  // Rows keep 24 entries and cut each string before it reaches the panel.
   readonly property int notificationMaxRows: 24
-  readonly property int notificationMaxFileBytes: 8192
-  readonly property int notificationMaxTotalBytes: 196608
-  readonly property int notificationMaxScan: 256
-  readonly property int notificationProcTimeout: 2
-
+  readonly property int notificationMaxLiveBytes: 2 * 1024 * 1024
+  readonly property int notificationMaxHistoryBytes: 512 * 1024
+  readonly property int notificationMaxTextChars: 2000
 
   readonly property string notificationsStateDir: stateHome + "/omarchy/notifications"
-  readonly property string notificationsHistoryDir: notificationsStateDir + "/history"
 
   function liveServiceFor(id) {
     return shell && typeof shell.firstPartyServiceFor === "function"
@@ -1449,6 +1447,7 @@ Item {
     // stayAwake flips it (the same dance the stock indicator does).
     if (s && typeof s.setIdleEnabled === "function") s.setIdleEnabled(s.stayAwake)
     else Util.execArgv(["omarchy", "toggle", "idle"])
+    stayAwakeProbeDelay.restart()
   }
 
   // Re-probe everything with no watchable file (nightlight lives in
@@ -1488,174 +1487,202 @@ Item {
     onTriggered: if (!nightlightProbe.running) nightlightProbe.running = true
   }
 
+  // Omarchy 4.5 keeps do-not-disturb in notifications/quiet.json (4.0 used
+  // notifications.json, which no longer exists — the tile never updated).
   FileView {
     id: dndStateFile
     printErrors: false
     watchChanges: true
-    path: root.stateHome + "/omarchy/notifications.json"
+    path: root.notificationsStateDir + "/quiet.json"
     onFileChanged: reload()
     onLoaded: {
-      try { root.dndState = JSON.parse(text()).dnd === true } catch (e) {}
+      var raw = text()
+      if (raw.length > 4096) return
+      try { root.dndState = JSON.parse(raw).dnd === true } catch (e) {}
     }
   }
 
-  // The host's own idle service watches this directory the same way: the
-  // flag file's existence is the state, so watch the dir and re-probe.
-  FileView {
-    id: indicatorsDirWatcher
-    printErrors: false
-    watchChanges: true
-    path: root.stateHome + "/omarchy/indicators"
-    onFileChanged: if (!stayAwakeProbe.running) stayAwakeProbe.running = true
+  // Stay-awake is a flag file's existence, which a file watcher can't see
+  // appear; re-probe shortly after our own toggle, and the open panel polls
+  // (quickStatePoll) for changes made elsewhere.
+  Timer {
+    id: stayAwakeProbeDelay
+    interval: 300
+    onTriggered: if (!stayAwakeProbe.running) stayAwakeProbe.running = true
+  }
+
+  // While a quick panel is open, re-probe the state that has no watchable
+  // file, so toggles made by hotkeys or the CLI show without reopening.
+  property int quickPanelsOpen: 0
+  Timer {
+    id: quickStatePoll
+    interval: 1500
+    repeat: true
+    running: root.quickPanelsOpen > 0
+    onTriggered: root.probeQuickState()
   }
 
   // ---- Notification list -------------------------------------------
-  // Active toasts live as JSON files directly under notifications/, land in
-  // history/ when they expire or are dismissed, and the history dir IS the
-  // recorded history (the service re-reads it from disk). Watching both
-  // directories gives a live, machine-wide list with no service object.
+  // Omarchy 4.5 persists notifications as two JSON arrays in
+  // ~/.local/state/omarchy/notifications/: live.json (on screen, oldest
+  // first) and history.json (closed, newest first). Watching both files
+  // gives a live, machine-wide list with no service object. (4.0 kept one
+  // file per toast; reading 4.5's directory that way turned quiet.json into
+  // a blank row and found no notifications at all.)
   function notificationRowKey(row) {
     if (!row) return ""
-    if (row.originalId !== undefined && row.originalId !== null && row.originalId !== 0)
-      return "id:" + row.originalId
-    if (row.id !== undefined && row.id !== null && row.id !== 0) return "id:" + row.id
-    return "k:" + row.app + "|" + row.summary + "|" + row.timestamp
+    if (row.key) return "k:" + row.key
+    return "t:" + row.app + "|" + row.summary + "|" + row.timestamp
   }
 
   function refreshNotificationRows() {
-    notificationListDelay.restart()
+    liveNotificationsFile.reload()
+    historyNotificationsFile.reload()
   }
 
-  Timer {
-    id: notificationListDelay
-    interval: 150
-    onTriggered: if (!notificationListProc.running) notificationListProc.running = true
+  function clipText(value) {
+    var text = value === undefined || value === null ? "" : String(value)
+    return text.length > notificationMaxTextChars ? text.substring(0, notificationMaxTextChars) : text
   }
 
-  Process {
-    id: notificationListProc
-    // Rank live then history by mtime without reading bodies, keep 24 files
-    // that pass size caps, then parse only those. timeout(2) is the deadline.
-    command: ["timeout", "--signal=KILL", String(root.notificationProcTimeout), "bash", "-c",
-      "set +e\n" +
-      "MAX_ROWS=" + String(root.notificationMaxRows) + "\n" +
-      "MAX_FILE=" + String(root.notificationMaxFileBytes) + "\n" +
-      "MAX_TOTAL=" + String(root.notificationMaxTotalBytes) + "\n" +
-      "MAX_SCAN=" + String(root.notificationMaxScan) + "\n" +
-      "MAX_OUT=" + String(root.notificationMaxTotalBytes) + "\n" +
-      "pop=\"$HOME/.local/state/omarchy/notifications\"\n" +
-      "hist=\"$pop/history\"\n" +
-      "sel=(); flags=(); total=0\n" +
-      "list() { find \"$1\" -maxdepth 1 -type f -name '*.json' -printf '%T@\\t%s\\t%p\\n' 2>/dev/null | head -n \"$MAX_SCAN\" | sort -nr; }\n" +
-      "pick() {\n" +
-      "  local live=\"$1\"\n" +
-      "  while IFS=$'\\t' read -r _mtime size path; do\n" +
-      "    [ \"${#sel[@]}\" -lt \"$MAX_ROWS\" ] || return 0\n" +
-      "    [ -n \"$path\" ] || continue\n" +
-      "    case \"$size\" in (\"\"|*[!0-9]*) continue ;; esac\n" +
-      "    [ \"$size\" -le \"$MAX_FILE\" ] || continue\n" +
-      "    [ $((total + size)) -le \"$MAX_TOTAL\" ] || continue\n" +
-      "    sel+=(\"$path\"); flags+=(\"$live\"); total=$((total + size))\n" +
-      "  done\n" +
-      "}\n" +
-      "pick 1 < <(list \"$pop\")\n" +
-      "pick 0 < <(list \"$hist\")\n" +
-      "if [ \"${#sel[@]}\" -eq 0 ]; then printf '%s\\n' '[]'; exit 0; fi\n" +
-      "i=0; parts=()\n" +
-      "for path in \"${sel[@]}\"; do\n" +
-      "  obj=$(jq -c --arg f \"$path\" --argjson live \"${flags[i]}\" 'select(type==\"object\") | . + {file:$f, live:($live==1)}' \"$path\" 2>/dev/null)\n" +
-      "  i=$((i+1))\n" +
-      "  [ -n \"$obj\" ] || continue\n" +
-      "  parts+=(\"$obj\")\n" +
-      "done\n" +
-      "if [ \"${#parts[@]}\" -eq 0 ]; then printf '%s\\n' '[]'; exit 0; fi\n" +
-      "out=$(printf '%s\\n' \"${parts[@]}\" | jq -cs 'sort_by(-(.timestamp // 0))')\n" +
-      "blen=$(printf '%s' \"$out\" | wc -c)\n" +
-      "[ \"$blen\" -le \"$MAX_OUT\" ] || exit 0\n" +
-      "printf '%s\\n' \"$out\""]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var raw = String(text || "").trim()
-        if (raw.indexOf("[") !== 0) return
-        if (raw.length > root.notificationMaxTotalBytes) return
-        try {
-          var rows = JSON.parse(raw)
-          if (!(rows instanceof Array)) return
-          if (rows.length > root.notificationMaxRows)
-            rows = rows.slice(0, root.notificationMaxRows)
-          root.applyNotificationRows(rows)
-        } catch (e) {}
-      }
+  function parseNotificationFile(raw, maxBytes) {
+    var text = String(raw || "")
+    if (text === "" || text.length > maxBytes) return []
+    try {
+      var rows = JSON.parse(text)
+      return rows instanceof Array ? rows : []
+    } catch (e) {
+      return []
     }
+  }
+
+  function notificationRowFrom(entry, live) {
+    if (!Util.isPlainObject(entry)) return null
+    var ts = Number(entry.ts)
+    return {
+      key: /^[A-Za-z0-9_-]{1,120}$/.test(String(entry.key || "")) ? String(entry.key) : "",
+      app: clipText(entry.app),
+      glyph: String(entry.glyph || "").substring(0, 4),
+      summary: clipText(entry.summary),
+      body: clipText(entry.body),
+      // 4.5 stores seconds; the panel's relative time reads milliseconds.
+      timestamp: isFinite(ts) && ts > 0 ? Math.round(ts * 1000) : 0,
+      live: live
+    }
+  }
+
+  function rebuildNotificationRows() {
+    var live = parseNotificationFile(liveNotificationsFile.text(), notificationMaxLiveBytes)
+    var history = parseNotificationFile(historyNotificationsFile.text(), notificationMaxHistoryBytes)
+    var rows = []
+    for (var i = live.length - 1; i >= 0 && rows.length < notificationMaxRows * 2; i--) {
+      var l = notificationRowFrom(live[i], true)
+      if (l) rows.push(l)
+    }
+    for (var j = 0; j < history.length && rows.length < notificationMaxRows * 2; j++) {
+      var h = notificationRowFrom(history[j], false)
+      if (h) rows.push(h)
+    }
+    applyNotificationRows(rows)
   }
 
   function applyNotificationRows(rows) {
     if (!(rows instanceof Array)) return
-    if (rows.length > root.notificationMaxRows)
-      rows = rows.slice(0, root.notificationMaxRows)
     var kept = []
     var seen = ({})
+    var present = ({})
     for (var i = 0; i < rows.length; i++) {
       var key = notificationRowKey(rows[i])
+      present[key] = true
       if (hiddenNotificationKeys[key] || seen[key]) continue
       seen[key] = true
-      kept.push(rows[i])
+      if (kept.length < notificationMaxRows) kept.push(rows[i])
     }
     notificationRows = kept
 
-    // Hidden keys exist to absorb rows the host is about to write (a
-    // dismissed toast lands in history); drop them once the underlying row
-    // has aged out of the on-disk list on its own.
+    // Dismissed keys only matter while their row is still on disk; drop the
+    // rest once the host has aged it out (history keeps 24 hours).
     var prune = ({})
+    var changed = false
     for (var k in hiddenNotificationKeys) {
-      for (var j = 0; j < rows.length; j++) {
-        if (notificationRowKey(rows[j]) === k) { prune[k] = true; break }
-      }
+      if (present[k]) prune[k] = true
+      else changed = true
     }
-    hiddenNotificationKeys = prune
+    if (changed) {
+      hiddenNotificationKeys = prune
+      persistHiddenNotificationKeys()
+    }
+  }
+
+  function hideNotificationKeys(keys) {
+    var hidden = ({})
+    for (var k in hiddenNotificationKeys) hidden[k] = true
+    for (var i = 0; i < keys.length; i++) if (keys[i]) hidden[keys[i]] = true
+    hiddenNotificationKeys = hidden
+    persistHiddenNotificationKeys()
+    rebuildNotificationRows()
   }
 
   function dismissNotificationRow(row) {
     if (!row) return
-    var hidden = ({})
-    for (var k in hiddenNotificationKeys) hidden[k] = true
-    hidden[notificationRowKey(row)] = true
-    hiddenNotificationKeys = hidden
-    if (row.live === true) {
-      // Host IPC takes the toast off the screen; the history entry it then
-      // becomes is kept out of the list by the hidden key above.
-      Util.execArgv(["omarchy-shell", "-q", "notifications", "dismiss", String(row.summary || "")])
-    } else if (row.file) {
-      Util.execArgv(["bash", "-c", "rm -f -- '" + String(row.file).replace(/'/g, "'\\''") + "'"])
-    }
-    refreshNotificationRows()
+    // Live toasts close through the host, landing in history under the same
+    // key; history has no removal IPC, so a dismissed row stays hidden here.
+    if (row.live === true && row.summary)
+      Util.execArgv(["omarchy-shell", "-q", "notifications", "dismiss", String(row.summary)])
+    hideNotificationKeys([notificationRowKey(row)])
   }
 
   function dismissAllNotificationRows() {
-    var hidden = ({})
-    for (var i = 0; i < notificationRows.length; i++)
-      hidden[notificationRowKey(notificationRows[i])] = true
-    hiddenNotificationKeys = hidden
+    var keys = []
+    for (var i = 0; i < notificationRows.length; i++) keys.push(notificationRowKey(notificationRows[i]))
     Util.execArgv(["omarchy-shell", "-q", "notifications", "dismissAll"])
-    Util.execArgv(["omarchy-shell", "-q", "notifications", "clear"])
-    refreshNotificationRows()
+    hideNotificationKeys(keys)
+  }
+
+  // Dismissed keys persist so history rows stay dismissed across restarts.
+  function persistHiddenNotificationKeys() {
+    var keys = Object.keys(hiddenNotificationKeys).slice(-400)
+    dismissedNotificationsFile.setText(JSON.stringify(keys) + "\n")
   }
 
   FileView {
-    id: notificationsDirWatcher
+    id: dismissedNotificationsFile
     printErrors: false
-    watchChanges: true
-    path: root.notificationsStateDir
-    onFileChanged: root.refreshNotificationRows()
+    atomicWrites: true
+    path: root.stateHome + "/skal-bar/dismissed-notifications.json"
+    onLoaded: {
+      var raw = text()
+      if (raw.length > 65536) return
+      try {
+        var keys = JSON.parse(raw)
+        if (!(keys instanceof Array)) return
+        var hidden = ({})
+        for (var i = 0; i < keys.length && i < 400; i++)
+          if (typeof keys[i] === "string" && keys[i].length <= 200) hidden[keys[i]] = true
+        root.hiddenNotificationKeys = hidden
+        root.rebuildNotificationRows()
+      } catch (e) {}
+    }
   }
 
   FileView {
-    id: notificationsHistoryWatcher
+    id: liveNotificationsFile
     printErrors: false
     watchChanges: true
-    path: root.notificationsHistoryDir
-    onFileChanged: root.refreshNotificationRows()
+    path: root.notificationsStateDir + "/live.json"
+    onFileChanged: reload()
+    onLoaded: root.rebuildNotificationRows()
+    onLoadFailed: root.rebuildNotificationRows()
+  }
+
+  FileView {
+    id: historyNotificationsFile
+    printErrors: false
+    watchChanges: true
+    path: root.notificationsStateDir + "/history.json"
+    onFileChanged: reload()
+    onLoaded: root.rebuildNotificationRows()
+    onLoadFailed: root.rebuildNotificationRows()
   }
 
   // ---- Weather -------------------------------------------------------

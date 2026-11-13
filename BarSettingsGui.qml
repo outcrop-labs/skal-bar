@@ -561,7 +561,7 @@ Item {
     command: ["sh", "-c", "command -v zenity >/dev/null 2>&1"]
     onExited: function(exitCode) {
       if (exitCode !== 0) {
-        root.pickerError = "zenity is not installed. Run: sudo pacman -S zenity — or type a path above."
+        root.pickerError = "zenity is not installed. Install the zenity package, or type a path above."
         return
       }
       iconPickerProc.command = root.pendingPickerArgs

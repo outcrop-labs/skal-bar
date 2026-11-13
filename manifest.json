@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "skal.bar",
   "name": "Sk\u00e5l Bar",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "Outcrop Labs",
   "description": "Fully updated for Omarchy 4.5. Omarchy status bar with Bartender-style hidden widget drawers, Noctalia-style appearance customization, a native system tray, and a settings GUI",
   "kinds": [
