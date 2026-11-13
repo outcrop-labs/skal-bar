@@ -557,13 +557,71 @@ Item {
   // any leftover *.tray entries defensively. Hidden widgets hoist to their
   // section's inner edge so the reveal expands out of the tray cluster —
   // Bartender-style. The center anchor entry stays where the user put it.
+  //
+  // Omarchy 4.5 layouts carry six sections. centerBegin and centerEnd fold
+  // into the center group around it, and the host's "tray" section (widgets
+  // drawn inside the tray drawer) joins the tray's side as hidden-until-
+  // reveal, so it opens with the tray chevron. Without this, every widget
+  // in those sections silently vanished from the bar.
   function normalizeLayout(layout) {
     var normalized = Util.normalizeLayout(Util.isPlainObject(layout) ? layout : fallbackBarConfig.layout)
+    var drawer = trayDrawerEntries(normalized.tray)
+    var trayLeft = String((barConfig && barConfig.traySection) || "").trim().toLowerCase() === "left"
+    var center = []
+      .concat(normalized.centerBegin || [], normalized.center || [], normalized.centerEnd || [])
     return {
-      left:   hoistHidden(stripTrayEntries(normalized.left), false),
-      center: hoistHidden(stripTrayEntries(normalized.center), false),
-      right:  hoistHidden(stripTrayEntries(normalized.right), true)
+      left:   hoistHidden(stripTrayEntries((normalized.left || []).concat(trayLeft ? drawer : [])), false),
+      center: hoistHidden(stripTrayEntries(center), false),
+      right:  hoistHidden(stripTrayEntries((normalized.right || []).concat(trayLeft ? [] : drawer)), true)
     }
+  }
+
+  function trayDrawerEntries(entries) {
+    var values = Array.isArray(entries) ? entries : []
+    var out = []
+    for (var i = 0; i < values.length; i++) {
+      var entry = values[i]
+      if (!Util.isPlainObject(entry)) continue
+      if (entryHiddenState(entry) === "shown") {
+        var copy = Util.cloneJson(entry)
+        copy.hidden = "hover"
+        out.push(copy)
+      } else {
+        out.push(entry)
+      }
+    }
+    return out
+  }
+
+  // Omarchy 4.5 keeps its "center" section centered with centerBegin and
+  // centerEnd hanging off its edges. With no explicit centerAnchor, anchor
+  // on a lone center widget (the clock, usually) so folding the sections
+  // into one group doesn't push it off center.
+  function implicitCenterAnchor(layout) {
+    if (!Util.isPlainObject(layout)) return ""
+    var center = Array.isArray(layout.center) ? layout.center : []
+    var begin = Array.isArray(layout.centerBegin) ? layout.centerBegin : []
+    var end = Array.isArray(layout.centerEnd) ? layout.centerEnd : []
+    if (center.length !== 1 || begin.length + end.length === 0) return ""
+    return entryId(center[0])
+  }
+
+  // The tray widget's own Bartender state, read from its (stripped) layout
+  // entry: "hover" collapses every tray icon into the drawer, "always"
+  // hides them outright. The chevron stays while the section has hidden
+  // widgets to reveal.
+  property string trayHiddenState: "shown"
+
+  function trayEntryHiddenState(layout) {
+    var src = Util.isPlainObject(layout) ? layout : {}
+    var sections = Util.barSections || ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var entries = Array.isArray(src[sections[s]]) ? src[sections[s]] : []
+      for (var i = 0; i < entries.length; i++) {
+        if (/\.tray$/.test(entryId(entries[i]))) return entryHiddenState(entries[i])
+      }
+    }
+    return "shown"
   }
 
   function stripTrayEntries(entries) {
@@ -605,7 +663,7 @@ Item {
 
     position = normalizePosition(config.position)
     setRequestedTransparency(config.transparent === true)
-    centerAnchor = Util.canonicalWidgetId(config.centerAnchor || "")
+    centerAnchor = Util.canonicalWidgetId(config.centerAnchor || implicitCenterAnchor(config.layout))
 
     customHeight = clampInt(config.height, 0, 200)
     barMargin = clampInt(config.margin, 0, 128)
@@ -623,6 +681,7 @@ Item {
     revealIcons = Util.isPlainObject(config.revealIcons) ? config.revealIcons : ({})
 
     if (!trayEnabled) hiddenPinned = false
+    trayHiddenState = trayEntryHiddenState(config.layout)
 
     // layoutEntries feeds plain JS arrays to the module Repeaters, and QML
     // cannot diff those: reassigning layoutConfig rebuilds every widget on
@@ -785,7 +844,9 @@ Item {
     for (var i = 0; i < moduleSlots.length; i++) {
       var slot = moduleSlots[i]
       if (!slot || !slot.activeItem) continue
-      if (slot.moduleName !== id) continue
+      // An omarchy.menu entry renders this plugin's menu widget; its hotkey
+      // (skal.bar.controls) must still find it.
+      if (slot.moduleName !== id && registryWidgetId(slot.moduleName) !== id) continue
       var item = slot.activeItem
       if (typeof item.open !== "function" || typeof item.close !== "function" || item.opened === undefined) continue
       candidates.push({ slot: slot, screenName: slotScreenName(slot), opened: item.opened === true })
@@ -841,6 +902,17 @@ Item {
 
   function canonicalWidgetId(name) {
     return Util.canonicalWidgetId(name)
+  }
+
+  // The stock Omarchy menu entry renders with this plugin's menu widget,
+  // which honors the Logo tab's settings (logo, logoImage, logoColor...).
+  // The stock widget ignores them, so a layout carrying "omarchy.menu" —
+  // every layout migrated from the stock bar — showed no custom logo.
+  function registryWidgetId(name) {
+    var id = canonicalWidgetId(name)
+    var widgets = barWidgetRegistry ? barWidgetRegistry.widgets : null
+    if (id === "omarchy.menu" && widgets && widgets[menuWidgetModuleId]) return menuWidgetModuleId
+    return id
   }
 
   function expandPath(path) {
@@ -1306,6 +1378,16 @@ Item {
     // exposed for a keybinding, same shape as the siblings above.
     function dismissAll(): void {
       root.dismissAllNotificationRows()
+    }
+
+    // Pin or unpin a section's hidden-widget reveal (left, center, right;
+    // empty = the tray's section) — for a keybinding, and for scripted
+    // screenshots of the open state.
+    function toggleReveal(region: string): string {
+      var key = String(region || "") === "" ? root.traySection : String(region)
+      if (key !== "left" && key !== "center" && key !== "right") return "unknown region"
+      root.toggleRegionPinned(key)
+      return root.hiddenPinnedByRegion[key] ? "open" : "closed"
     }
   }
 
@@ -2493,8 +2575,8 @@ Item {
 
       bar: root
       anchors.fill: parent
-      text: chevronRoot.icon
-      textRotation: (root.vertical ? 90 : 0) + chevronRoot.swing
+      text: ""
+      hasVisualContent: true
       opacity: chevronRoot.open ? (chevronRoot.swings ? 0.6 : 0) : 1
       enabled: !(chevronRoot.open && !chevronRoot.swings)
       tooltipText: chevronRoot.open ? "Collapse hidden widgets" : "Reveal hidden widgets"
@@ -2506,6 +2588,16 @@ Item {
       onPressed: function(button) {
         if (button === Qt.LeftButton) root.toggleRegionPinned(chevronRoot.region)
       }
+
+      RevealGlyph {
+        // Exact coordinates: centerIn rounds odd differences off center.
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        glyph: chevronRoot.icon
+        rotation: (root.vertical ? 90 : 0) + chevronRoot.swing
+        color: iconBtn.foreground
+        scale: iconBtn.pressScale
+      }
     }
 
     BarIconButton {
@@ -2513,7 +2605,8 @@ Item {
 
       bar: root
       anchors.fill: parent
-      text: "✕"
+      text: ""
+      hasVisualContent: true
       opacity: chevronRoot.open && !chevronRoot.swings ? 1 : 0
       enabled: chevronRoot.open && !chevronRoot.swings
       tooltipText: "Collapse hidden widgets"
@@ -2524,6 +2617,15 @@ Item {
 
       onPressed: function(button) {
         if (button === Qt.LeftButton) root.toggleRegionPinned(chevronRoot.region)
+      }
+
+      RevealGlyph {
+        // Exact coordinates: centerIn rounds odd differences off center.
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        glyph: "✕"
+        color: xBtn.foreground
+        scale: xBtn.pressScale
       }
     }
   }
@@ -2542,7 +2644,7 @@ Item {
     readonly property var registryComponent: {
       var w = root.barWidgetRegistry.widgets
       if (customType) return null
-      var registryName = root.canonicalWidgetId(moduleName)
+      var registryName = root.registryWidgetId(moduleName)
       return w[registryName] ? w[registryName].component : null
     }
     readonly property bool qmlCustom: customType === "qml"

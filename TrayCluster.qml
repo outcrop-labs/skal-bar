@@ -41,7 +41,11 @@ Item {
   readonly property bool sectionRevealArmed: bar && typeof bar.sectionHasHidden === "function"
     ? bar.sectionHasHidden(bar.traySection)
     : false
-  readonly property bool chevronArmed: allItems.length > 0 || sectionRevealArmed
+  // The tray widget's Bartender state (Bar.trayHiddenState): "hover" tucks
+  // every icon, pinned ones included, into the drawer; "always" hides them
+  // all — the chevron then remains only for the section's hidden widgets.
+  readonly property string trayState: bar && bar.trayHiddenState ? String(bar.trayHiddenState) : "shown"
+  readonly property bool chevronArmed: (trayState !== "always" && allItems.length > 0) || sectionRevealArmed
   property bool managePopupOpen: false
   property bool trayMenuOpen: false
   property var activeTrayItem: null
@@ -50,8 +54,9 @@ Item {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property var pinnedIds: traySettings.pinned instanceof Array ? traySettings.pinned : []
   readonly property var hiddenIds: traySettings.hidden instanceof Array ? traySettings.hidden : []
-  readonly property var pinnedItems: bucket("pinned")
-  readonly property var drawerItems: bucket("drawer")
+  readonly property var pinnedItems: trayState === "shown" ? bucket("pinned") : []
+  readonly property var drawerItems: trayState === "always" ? []
+    : (trayState === "hover" ? bucket("pinned").concat(bucket("drawer")) : bucket("drawer"))
   readonly property var allItems: bucket("all")
   readonly property int drawerCount: drawerItems.length
   readonly property int trayItemExtent: Style.bar.iconSlot
@@ -330,8 +335,9 @@ Item {
             id: trayIconBtn
             bar: root.bar
             anchors.fill: parent
-            text: expandIcon.icon
-            textRotation: expandIcon.swing
+            text: ""
+            hasVisualContent: true
+            readonly property real glyphRotation: expandIcon.swing
             opacity: expandIcon.open ? (expandIcon.swings ? 0.6 : 0) : 1
             enabled: !(expandIcon.open && !expandIcon.swings)
 
@@ -343,13 +349,24 @@ Item {
               if (button === Qt.RightButton) root.managePopupOpen = !root.managePopupOpen
               else if (button === Qt.LeftButton && root.bar && typeof root.bar.toggleRegionPinned === "function") root.bar.toggleRegionPinned(root.bar.traySection)
             }
+
+            RevealGlyph {
+              // Exact coordinates: centerIn rounds odd differences off center.
+              x: (parent.width - width) / 2
+              y: (parent.height - height) / 2
+              glyph: expandIcon.icon
+              rotation: trayIconBtn.glyphRotation
+              color: trayIconBtn.foreground
+              scale: trayIconBtn.pressScale
+            }
           }
 
           BarIconButton {
             id: trayXBtn
             bar: root.bar
             anchors.fill: parent
-            text: "✕"
+            text: ""
+            hasVisualContent: true
             opacity: expandIcon.open && !expandIcon.swings ? 1 : 0
             enabled: expandIcon.open && !expandIcon.swings
 
@@ -360,6 +377,15 @@ Item {
             onPressed: function(button) {
               if (button === Qt.RightButton) root.managePopupOpen = !root.managePopupOpen
               else if (button === Qt.LeftButton && root.bar && typeof root.bar.toggleRegionPinned === "function") root.bar.toggleRegionPinned(root.bar.traySection)
+            }
+
+            RevealGlyph {
+              // Exact coordinates: centerIn rounds odd differences off center.
+              x: (parent.width - width) / 2
+              y: (parent.height - height) / 2
+              glyph: "✕"
+              color: trayXBtn.foreground
+              scale: trayXBtn.pressScale
             }
           }
         }
@@ -464,8 +490,9 @@ Item {
             id: trayIconBtn
             bar: root.bar
             anchors.fill: parent
-            text: expandIcon.icon
-            textRotation: 90 + expandIcon.swing
+            text: ""
+            hasVisualContent: true
+            readonly property real glyphRotation: 90 + expandIcon.swing
             opacity: expandIcon.open ? (expandIcon.swings ? 0.6 : 0) : 1
             enabled: !(expandIcon.open && !expandIcon.swings)
 
@@ -477,13 +504,24 @@ Item {
               if (button === Qt.RightButton) root.managePopupOpen = !root.managePopupOpen
               else if (button === Qt.LeftButton && root.bar && typeof root.bar.toggleRegionPinned === "function") root.bar.toggleRegionPinned(root.bar.traySection)
             }
+
+            RevealGlyph {
+              // Exact coordinates: centerIn rounds odd differences off center.
+              x: (parent.width - width) / 2
+              y: (parent.height - height) / 2
+              glyph: expandIcon.icon
+              rotation: trayIconBtn.glyphRotation
+              color: trayIconBtn.foreground
+              scale: trayIconBtn.pressScale
+            }
           }
 
           BarIconButton {
             id: trayXBtn
             bar: root.bar
             anchors.fill: parent
-            text: "✕"
+            text: ""
+            hasVisualContent: true
             opacity: expandIcon.open && !expandIcon.swings ? 1 : 0
             enabled: expandIcon.open && !expandIcon.swings
 
@@ -494,6 +532,15 @@ Item {
             onPressed: function(button) {
               if (button === Qt.RightButton) root.managePopupOpen = !root.managePopupOpen
               else if (button === Qt.LeftButton && root.bar && typeof root.bar.toggleRegionPinned === "function") root.bar.toggleRegionPinned(root.bar.traySection)
+            }
+
+            RevealGlyph {
+              // Exact coordinates: centerIn rounds odd differences off center.
+              x: (parent.width - width) / 2
+              y: (parent.height - height) / 2
+              glyph: "✕"
+              color: trayXBtn.foreground
+              scale: trayXBtn.pressScale
             }
           }
         }

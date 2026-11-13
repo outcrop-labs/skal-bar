@@ -3,6 +3,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import qs.Commons
 import qs.Ui
 
@@ -83,7 +84,15 @@ Item {
   readonly property color text: Color.popups.text
   readonly property color textDim: Qt.darker(Color.popups.text, 1.4)
 
+  // Optional payload {"tab": "appearance" | "widgets" | "logo"} opens on
+  // that tab: omarchy-shell shell summon skal.bar '{"tab":"logo"}'
   function open(payloadJson) {
+    var tabs = ["appearance", "widgets", "logo"]
+    try {
+      var payload = payloadJson ? JSON.parse(String(payloadJson)) : null
+      var index = payload && typeof payload.tab === "string" ? tabs.indexOf(payload.tab) : -1
+      if (index !== -1) root.currentTab = index
+    } catch (e) {}
     root.opened = true
   }
 
@@ -151,13 +160,29 @@ Item {
     return "shown"
   }
 
+  // Omarchy 4.5 splits the layout into six sections. This panel (like the
+  // bar) shows three rows: centerBegin/center/centerEnd fold into "center",
+  // and the host's "tray" section — widgets drawn inside the tray drawer —
+  // shows in the tray's row as hidden-until-reveal.
+  readonly property var allSections: ["left", "centerBegin", "center", "centerEnd", "right", "tray"]
+
+  function trayViewRegion() {
+    return root.cfgStr("traySection", "right") === "left" ? "left" : "right"
+  }
+
+  function viewRegionOf(section) {
+    if (section === "centerBegin" || section === "centerEnd") return "center"
+    if (section === "tray") return root.trayViewRegion()
+    return section
+  }
+
   readonly property var layoutEntries: {
     var config = root.cfg
     var out = []
     if (!Util.isPlainObject(config.layout)) return out
-    var regions = ["left", "center", "right"]
-    for (var r = 0; r < regions.length; r++) {
-      var entries = Array.isArray(config.layout[regions[r]]) ? config.layout[regions[r]] : []
+    var sections = root.allSections
+    for (var r = 0; r < sections.length; r++) {
+      var entries = Array.isArray(config.layout[sections[r]]) ? config.layout[sections[r]] : []
       for (var i = 0; i < entries.length; i++) {
         var entry = entries[i]
         var id = typeof entry === "string" ? entry : (entry && entry.id ? String(entry.id) : "")
@@ -169,7 +194,8 @@ Item {
           }
         }
         var state = root.hiddenStateOf(entry)
-        out.push({ region: regions[r], id: id, state: state, stateRank: root.stateRank(state), settings: settings })
+        if (sections[r] === "tray" && state === "shown") state = "hover"
+        out.push({ region: root.viewRegionOf(sections[r]), section: sections[r], id: id, state: state, stateRank: root.stateRank(state), settings: settings })
       }
     }
     return out
@@ -286,25 +312,30 @@ Item {
   // chip edge, then insert into the section's real array. Zones are purely
   // a rank-filtered VIEW — the config keeps the user's actual order, so
   // hidden widgets reveal in place on the bar instead of migrating.
+  // The tray chip moves too: its hidden state collapses the tray icons
+  // (hidden until reveal) or hides them outright (always hidden), and
+  // moving it to the left or right row moves the tray cluster there. The
+  // tray only lives at a side section's inner edge, so the center row
+  // refuses it.
   function moveWidgetZone(widgetId, toRegion, targetState, beforeId) {
-    if (/\.tray$/.test(String(widgetId || ""))) return
+    var isTray = /\.tray$/.test(String(widgetId || ""))
+    if (isTray && toRegion === "center") return
     mutate(function(config) {
       var bar = root.barObj(config)
       if (!Util.isPlainObject(bar.layout)) bar.layout = {}
-      var regions = ["left", "center", "right"]
-      for (var r = 0; r < regions.length; r++) {
-        if (!Array.isArray(bar.layout[regions[r]])) bar.layout[regions[r]] = []
+      var sections = root.allSections
+      if (["left", "center", "right"].indexOf(toRegion) === -1) return
+
+      function matches(entry, id) {
+        return typeof entry === "string" ? entry === id : (entry && entry.id === id)
       }
-      if (regions.indexOf(toRegion) === -1) return
 
       var moved = null
-      for (var g = 0; g < regions.length && !moved; g++) {
-        var source = bar.layout[regions[g]]
+      for (var g = 0; g < sections.length && !moved; g++) {
+        var source = Array.isArray(bar.layout[sections[g]]) ? bar.layout[sections[g]] : []
         for (var i = 0; i < source.length; i++) {
-          var entry = source[i]
-          var matches = typeof entry === "string" ? entry === widgetId : (entry && entry.id === widgetId)
-          if (!matches) continue
-          moved = entry
+          if (!matches(source[i], widgetId)) continue
+          moved = source[i]
           source.splice(i, 1)
           break
         }
@@ -315,16 +346,29 @@ Item {
       if (targetState === "shown") delete moved.hidden
       else moved.hidden = targetState
 
-      var target = bar.layout[toRegion]
-      var toIndex = target.length
+      // Insert beside the drop target in whichever real section holds it;
+      // otherwise at the end of the row (centerEnd's end for a non-empty
+      // centerEnd, so the widget lands where the row shows it).
+      var candidates = toRegion === "center" ? ["centerBegin", "center", "centerEnd"] : [toRegion]
+      var targetSection = toRegion
+      var toIndex = -1
       if (beforeId) {
-        for (var f = 0; f < target.length; f++) {
-          var candidate = target[f]
-          var hit = typeof candidate === "string" ? candidate === beforeId : (candidate && candidate.id === beforeId)
-          if (hit) { toIndex = f; break }
+        for (var c = 0; c < candidates.length && toIndex === -1; c++) {
+          var list = Array.isArray(bar.layout[candidates[c]]) ? bar.layout[candidates[c]] : []
+          for (var f = 0; f < list.length; f++) {
+            if (matches(list[f], beforeId)) { targetSection = candidates[c]; toIndex = f; break }
+          }
         }
       }
-      target.splice(toIndex, 0, moved)
+      if (toIndex === -1 && toRegion === "center"
+          && Array.isArray(bar.layout.centerEnd) && bar.layout.centerEnd.length > 0) {
+        targetSection = "centerEnd"
+      }
+      if (!Array.isArray(bar.layout[targetSection])) bar.layout[targetSection] = []
+      var target = bar.layout[targetSection]
+      target.splice(toIndex === -1 ? target.length : toIndex, 0, moved)
+
+      if (isTray) bar.traySection = toRegion
     })
   }
 
@@ -393,9 +437,9 @@ Item {
     var config = root.cfg
     var id = root.menuEntryId
     if (id === "" || !Util.isPlainObject(config.layout)) return null
-    var regions = ["left", "center", "right"]
-    for (var r = 0; r < regions.length; r++) {
-      var entries = Array.isArray(config.layout[regions[r]]) ? config.layout[regions[r]] : []
+    var sections = root.allSections
+    for (var r = 0; r < sections.length; r++) {
+      var entries = Array.isArray(config.layout[sections[r]]) ? config.layout[sections[r]] : []
       for (var i = 0; i < entries.length; i++) {
         var entry = entries[i]
         if (typeof entry === "object" && entry !== null && entry.id === id) return entry
@@ -460,56 +504,29 @@ Item {
     return colorForToken(root.logoVal("logoColor", ""))
   }
 
-  // The image actually displayed: when a color is set, a tinted copy of
-  // the SVG (fills rewritten, cached) is generated at pick time.
-  function effectiveLogoSource() {
-    var tinted = root.logoVal("logoImageTinted", "")
-    if (tinted !== "") {
-      if (tinted.indexOf("~/") === 0) tinted = Quickshell.env("HOME") + tinted.substring(1)
-      return "file://" + tinted
-    }
+  // The logo image as a file URL. Tinting is live (see LogoImage), the same
+  // way MenuWidget paints it on the bar — no cached recolored copies.
+  function logoSourceUrl() {
     var path = root.logoVal("logoImage", "")
     if (path === "") return ""
     if (path.indexOf("~/") === 0) path = Quickshell.env("HOME") + path.substring(1)
     return "file://" + path
   }
 
-  // Callers pass the just-chosen token/image explicitly: reading cfg back
-  // immediately after setLogo races QML's lazy binding propagation and
-  // would tint with the previous color. Each tint lands in its own
-  // per-color cache file — QML Image caches by URL, so rewriting one file
-  // in place would never reload.
-  function regenerateTintedLogo(forcedToken, forcedImage) {
-    var image = forcedImage !== undefined ? forcedImage : root.logoVal("logoImage", "")
-    var token = forcedToken !== undefined ? forcedToken : root.logoVal("logoColor", "")
-    if (image === "") return
-    var color = colorForToken(token).toString()
-    var home = Quickshell.env("HOME")
-    var src = image.indexOf("~/") === 0 ? home + image.substring(1) : image
-    var cache = home + "/.cache/skal-bar/logo." + color.replace("#", "") + ".svg"
-    var script = 's/fill="(none|transparent)"/fill="__KEEP__"/g; '
-      + 's/fill="[^"]*"/fill="' + color + '"/g; '
-      + 's/fill:(none|transparent)/fill:__KEEP__/g; '
-      + 's/fill:[^;"}]+/fill:' + color + '/g; '
-      + 's/stroke="[^"]*"/stroke="' + color + '"/g; '
-      + 's/__KEEP__/none/g'
-    tintProc.pendingPath = "~/.cache/skal-bar/logo." + color.replace("#", "") + ".svg"
-    // Fixed shell program, zero interpolation: the sed script, the picked
-    // source path and the cache paths all arrive as positional parameters,
-    // so a quote or a semicolon in a chosen filename stays data.
-    tintProc.command = ["bash", "-c",
-      'mkdir -p "$3" && sed -E "$1" "$2" > "$4"',
-      "skal-tint", script, src, home + "/.cache/skal-bar", cache]
-    tintProc.running = true
+  // SVG silhouettes always tint (foreground by default); raster logos keep
+  // their colors unless a logo color is set. Mirrors MenuWidget.tintImage.
+  function logoTinted() {
+    return /\.svgz?$/i.test(root.logoVal("logoImage", "")) || root.logoVal("logoColor", "") !== ""
   }
 
-  Process {
-    id: tintProc
-    property string pendingPath: ""
-    onExited: function(exitCode) {
-      if (exitCode === 0 && pendingPath !== "") root.setLogo("logoImageTinted", pendingPath)
-    }
+  // Setting a new image also drops the stale logoImageTinted key that older
+  // versions wrote (a per-color sed copy that ignored the image path).
+  function setLogoImage(path) {
+    root.setLogo("logoImageTinted", null)
+    root.setLogo("logoImage", path)
   }
+
+  property bool customColorMode: false
 
   function logoMode() {
     return root.logoVal("logoMode", "glyph") === "image" ? "image" : "glyph"
@@ -521,9 +538,9 @@ Item {
     mutate(function(config) {
       var bar = root.barObj(config)
       if (!Util.isPlainObject(bar.layout)) return
-      var regions = ["left", "center", "right"]
-      for (var r = 0; r < regions.length; r++) {
-        var entries = Array.isArray(bar.layout[regions[r]]) ? bar.layout[regions[r]] : []
+      var sections = root.allSections
+      for (var r = 0; r < sections.length; r++) {
+        var entries = Array.isArray(bar.layout[sections[r]]) ? bar.layout[sections[r]] : []
         for (var i = 0; i < entries.length; i++) {
           var entry = entries[i]
           if (typeof entry !== "object" || entry === null || entry.id !== id) continue
@@ -560,8 +577,7 @@ Item {
       onRead: function(line) {
         var path = String(line).trim()
         if (path !== "") {
-          root.setLogo("logoImage", path)
-          root.regenerateTintedLogo(undefined, path)
+          root.setLogoImage(path)
         }
       }
     }
@@ -1213,15 +1229,11 @@ FormRow {
                       font.italic: root.logoVal("logoStyle", "normal") === "italic"
                     }
 
-                    Image {
+                    LogoImage {
                       visible: root.logoMode() === "image" && root.logoVal("logoImage", "") !== ""
                       anchors.fill: parent
                       anchors.margins: Style.space(2)
-                      source: root.effectiveLogoSource()
-                      sourceSize: Qt.size(192, 192)
-                      fillMode: Image.PreserveAspectFit
-                      smooth: true
-                      mipmap: true
+                      decodeSize: 192
                     }
                   }
 
@@ -1258,15 +1270,11 @@ FormRow {
                         font.italic: root.logoVal("logoStyle", "normal") === "italic"
                       }
 
-                      Image {
+                      LogoImage {
                         height: previewBar.height - Style.space(2)
                         width: height
                         visible: root.logoMode() === "image" && root.logoVal("logoImage", "") !== ""
-                        source: root.effectiveLogoSource()
-                        sourceSize: Qt.size(96, 96)
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
-                        mipmap: true
+                        decodeSize: 96
                       }
 
                       Text {
@@ -1389,6 +1397,7 @@ FormRow {
 
               FormRow {
                 label: "Path"
+                visible: root.logoMode() === "image"
 
                 TextField {
                   Layout.fillWidth: true
@@ -1398,7 +1407,7 @@ FormRow {
                   font.pixelSize: Style.font.body
                   color: root.text
                   foreground: root.text
-                  onEditingFinished: root.setLogo("logoImage", String(text).trim())
+                  onEditingFinished: if (String(text).trim() !== root.logoVal("logoImage", "")) root.setLogoImage(String(text).trim())
                 }
 
                 Button {
@@ -1413,7 +1422,8 @@ FormRow {
                     root.pendingPickerArgs = [
                       "zenity", "--file-selection",
                       "--title=Pick a logo icon",
-                      "--file-filter=SVG icons | *.svg",
+                      "--file-filter=Images | *.svg *.svgz *.png *.jpg *.jpeg *.webp",
+                      "--file-filter=SVG icons | *.svg *.svgz",
                       "--filename=" + dir
                     ]
                     root.pickerError = ""
@@ -1424,7 +1434,7 @@ FormRow {
 
               SectionHeader {
                 title: "COLOR"
-                hint: "applies to glyph and SVG tint"
+                hint: "glyph and SVG tint; tints PNGs only when set"
                 visible: root.menuEntryId !== ""
               }
 
@@ -1438,6 +1448,7 @@ FormRow {
                   foreground: root.text
                   value: {
                     var token = root.logoVal("logoColor", "")
+                    if (root.customColorMode) return "#custom"
                     if (token === "" || token === "accent" || token === "foreground" || token === "muted" || token === "background") return token
                     return "#custom"
                   }
@@ -1449,9 +1460,11 @@ FormRow {
                     { value: "#custom", label: "Custom (#hex)" }
                   ]
                   onChanged: function(value) {
-                    var token = value === "" || value === "#custom" ? "" : value
-                    root.setLogo("logoColor", token === "" ? null : token)
-                    root.regenerateTintedLogo(token)
+                    // Custom keeps the current color until a hex is entered
+                    // in the field it reveals; it used to reset to default.
+                    root.customColorMode = value === "#custom"
+                    if (value === "#custom") return
+                    root.setLogo("logoColor", value === "" ? null : value)
                   }
                 }
 
@@ -1463,6 +1476,28 @@ FormRow {
                   color: root.resolvedLogoColor()
                   border.color: root.textDim
                   border.width: 1
+                }
+              }
+
+              FormRow {
+                label: "Hex"
+                visible: logoColorDD.value === "#custom"
+
+                TextField {
+                  id: logoHexField
+                  Layout.fillWidth: true
+                  readonly property string current: root.logoVal("logoColor", "")
+                  text: /^#[0-9A-Fa-f]{6}$/.test(current) ? current : ""
+                  placeholderText: "#rrggbb"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                  color: /^#?[0-9A-Fa-f]{6}$/.test(String(text).trim()) || String(text).trim() === "" ? root.text : Color.urgent
+                  foreground: root.text
+                  onEditingFinished: {
+                    var hex = String(text).trim()
+                    if (hex !== "" && hex[0] !== "#") hex = "#" + hex
+                    if (/^#[0-9A-Fa-f]{6}$/.test(hex)) root.setLogo("logoColor", hex.toLowerCase())
+                  }
                 }
               }
             }
@@ -1710,25 +1745,65 @@ FormRow {
   // keeps its own interactions off while providing click-select and drag.
   // Chips carry no border — selection and hover read as soft fills so the
   // tray outline stays the only chrome in the arrangement area.
+  // The logo image, tinted live through its alpha like the bar's MenuWidget.
+  component LogoImage: Item {
+    id: logoImg
+    property int decodeSize: 96
+
+    Image {
+      id: logoImgSource
+      anchors.fill: parent
+      source: logoImg.visible ? root.logoSourceUrl() : ""
+      sourceSize: Qt.size(logoImg.decodeSize, logoImg.decodeSize)
+      fillMode: Image.PreserveAspectFit
+      smooth: true
+      mipmap: true
+      visible: !root.logoTinted()
+      layer.enabled: root.logoTinted()
+    }
+
+    Rectangle {
+      anchors.fill: logoImgSource
+      color: root.resolvedLogoColor()
+      visible: root.logoTinted()
+      layer.enabled: root.logoTinted()
+      layer.effect: MultiEffect {
+        maskEnabled: true
+        maskSource: logoImgSource
+        maskThresholdMin: 0.5
+        maskSpreadAtMin: 1.0
+      }
+    }
+  }
+
+  // Mirrors Bar.registryWidgetId: an omarchy.menu entry renders this
+  // plugin's own menu widget (the one that honors the Logo tab).
+  function chipRegistryId(id) {
+    var widgets = root.barWidgetRegistry ? root.barWidgetRegistry.widgets : null
+    if (id === "omarchy.menu" && widgets && widgets["skal.bar"]) return "skal.bar"
+    return id
+  }
+
   component WidgetChip: Item {
     id: chip
 
     property var entry
     readonly property bool isWidgetChip: true
-    readonly property bool isPinned: /^.*\.tray$/.test(chip.entry ? chip.entry.id : "")
+    // The tray anchors its section (accent marker) but moves like any chip.
+    readonly property bool isTray: /^.*\.tray$/.test(chip.entry ? chip.entry.id : "")
     readonly property bool isSelected: root.selectedWidget === chip.entry.id
     readonly property bool dimmed: chip.entry.state !== "shown"
     readonly property var regComponent: {
       var widgets = root.barWidgetRegistry ? root.barWidgetRegistry.widgets : null
       if (!widgets) return null
-      var found = widgets[chip.entry.id]
+      var found = widgets[root.chipRegistryId(chip.entry.id)]
       return found ? found.component : null
     }
     readonly property string displayGlyph: root.glyphForWidget(chip.entry ? chip.entry.id : "")
 
     readonly property string displayName: {
       var widgets = root.barWidgetRegistry ? root.barWidgetRegistry.widgets : null
-      var found = widgets ? widgets[chip.entry.id] : null
+      var found = widgets ? widgets[root.chipRegistryId(chip.entry.id)] : null
       if (found && found.displayName) {
         // Registry names still carry vendor prefixes sometimes; show the
         // bare name either way.
@@ -1772,7 +1847,7 @@ FormRow {
     }
 
     Rectangle {
-      visible: chip.isPinned
+      visible: chip.isTray
       width: 2
       height: parent.height - Style.space(4)
       anchors.left: parent.left
@@ -1840,8 +1915,7 @@ FormRow {
 
       anchors.fill: parent
       hoverEnabled: true
-      cursorShape: chip.isPinned ? Qt.ArrowCursor
-        : (root.chipDragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor)
+      cursorShape: (root.chipDragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor)
 
       onPressed: function(mouse) {
         pressX = mouse.x
@@ -1865,7 +1939,6 @@ FormRow {
 
       onPositionChanged: function(mouse) {
         updateChipTooltip(mouse.x, mouse.y)
-        if (chip.isPinned) return
         if (!(mouse.buttons & Qt.LeftButton) || !pressed) return
         var scenePoint = chip.mapToItem(null, mouse.x, mouse.y)
         if (!root.chipDragging) {
