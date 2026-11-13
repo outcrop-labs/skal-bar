@@ -4,6 +4,7 @@ import QtQuick.Controls
 import QtQuick.Effects
 import Quickshell.Services.SystemTray
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "TrayModel.js" as TrayModel
 
@@ -50,7 +51,7 @@ Item {
   property bool trayMenuOpen: false
   property var activeTrayItem: null
   property var activeTrayAnchor: null
-  readonly property color foreground: bar ? bar.foreground : Color.foreground
+  readonly property color foreground: bar ? bar.foreground : Commons.Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property var pinnedIds: traySettings.pinned instanceof Array ? traySettings.pinned : []
   readonly property var hiddenIds: traySettings.hidden instanceof Array ? traySettings.hidden : []
@@ -804,7 +805,7 @@ Item {
             anchors.rightMargin: Style.space(10)
             anchors.verticalCenter: parent.verticalCenter
             height: 1
-            color: Color.popups.border
+            color: Commons.Color.popups.border
             opacity: 0.45
           }
         }
@@ -858,7 +859,7 @@ Item {
                 anchors.rightMargin: Style.space(10)
                 anchors.verticalCenter: parent.verticalCenter
                 height: 1
-                color: Color.popups.border
+                color: Commons.Color.popups.border
                 opacity: 0.45
               }
 

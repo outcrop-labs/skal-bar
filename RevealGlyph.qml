@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Shapes
 import qs.Commons
+import qs.Commons as Commons
 
 // The reveal/collapse icons (› ‹ ❯ ❮ ▸ ◂ ▾ ▴ ⋯ ≡ ✕), drawn as vectors in a
 // square box whose center is the ink's center. Font glyphs for these come
@@ -14,7 +15,7 @@ Item {
   id: root
 
   property string glyph: "›"
-  property color color: Color.foreground
+  property color color: Commons.Color.foreground
   // Edge of the square the ink fits in; the bar's icon size by default.
   property real size: Style.bar.iconSize
   property string fontFamily: Style.font.family

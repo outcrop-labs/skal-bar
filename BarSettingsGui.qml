@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Bar settings GUI for skal.bar. Summoned as a panel plugin:
@@ -81,8 +82,8 @@ Item {
     onLoadFailed: root.configDoc = ({})
   }
   readonly property int cardWidth: 900
-  readonly property color text: Color.popups.text
-  readonly property color textDim: Qt.darker(Color.popups.text, 1.4)
+  readonly property color text: Commons.Color.popups.text
+  readonly property color textDim: Qt.darker(Commons.Color.popups.text, 1.4)
 
   // Optional payload {"tab": "appearance" | "widgets" | "logo"} opens on
   // that tab: omarchy-shell shell summon skal.bar '{"tab":"logo"}'
@@ -491,13 +492,13 @@ Item {
   }
 
   function colorForToken(token) {
-    if (token === "accent") return Color.accent
-    if (token === "foreground") return Color.foreground
-    if (token === "urgent") return Color.urgent
-    if (token === "muted") return Color.muted
-    if (token === "background") return Color.background
+    if (token === "accent") return Commons.Color.accent
+    if (token === "foreground") return Commons.Color.foreground
+    if (token === "urgent") return Commons.Color.urgent
+    if (token === "muted") return Commons.Color.muted
+    if (token === "background") return Commons.Color.background
     if (/^#[0-9A-Fa-f]{6}$/.test(token)) return token
-    return Color.foreground
+    return Commons.Color.foreground
   }
 
   function resolvedLogoColor() {
@@ -612,7 +613,7 @@ Item {
 
     Rectangle {
       anchors.fill: parent
-      color: Color.menu.scrim
+      color: Commons.Color.menu.scrim
 
       MouseArea {
         anchors.fill: parent
@@ -634,8 +635,8 @@ Item {
       )
       anchors.centerIn: parent
       radius: Style.cornerRadius
-      color: Color.popups.background
-      borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
+      color: Commons.Color.popups.background
+      borderSpec: Border.surfaceSpec("popups", "border", Commons.Color.popups.border, Math.max(1, Style.space(2)))
 
       MouseArea { anchors.fill: parent; onClicked: {} }
 
@@ -647,7 +648,7 @@ Item {
         width: chipTooltipLabel.implicitWidth + Style.space(4)
         height: chipTooltipLabel.implicitHeight + Style.space(3)
         radius: Math.min(Style.cornerRadius, Style.space(3))
-        color: Color.background
+        color: Commons.Color.background
         borderSpec: Border.flat(root.textDim, 1)
         z: 90
 
@@ -676,8 +677,8 @@ Item {
           width: root.chipDragWidth
           height: root.chipDragHeight
           radius: Math.min(Style.cornerRadius, height / 2)
-          color: Color.background
-          border.color: Color.accent
+          color: Commons.Color.background
+          border.color: Commons.Color.accent
           border.width: 1
           opacity: 0.9
         }
@@ -1203,12 +1204,12 @@ FormRow {
                   id: previewStage
                   anchors.fill: parent
                   radius: Math.min(Style.cornerRadius, Style.space(5))
-                  color: Color.background
+                  color: Commons.Color.background
                   borderSpec: Border.none()
 
                   readonly property real k: 0.42
                   readonly property color barBg: root.cfgStr("backgroundColor", "") !== ""
-                    ? root.cfgStr("backgroundColor", "") : Color.bar.background
+                    ? root.cfgStr("backgroundColor", "") : Commons.Color.bar.background
 
                   // Hero: the mark itself, large.
                   Item {
@@ -1281,7 +1282,7 @@ FormRow {
                         // Dimmed stand-in widgets, flowing after the logo.
                         visible: !(root.logoMode() === "image" && root.logoVal("logoImage", "") !== "")
                         text: "󰎤  󰎥  󰎦"
-                        color: Color.bar.text
+                        color: Commons.Color.bar.text
                         opacity: 0.35
                         font.family: Style.font.family
                         font.pixelSize: previewBar.height - Style.space(3)
@@ -1293,7 +1294,7 @@ FormRow {
                       anchors.rightMargin: Style.space(3)
                       anchors.verticalCenter: parent.verticalCenter
                       text: "󰕾  󰖩  󰁹   14:32"
-                      color: Color.bar.text
+                      color: Commons.Color.bar.text
                       opacity: 0.35
                       font.family: Style.font.family
                       font.pixelSize: parent.height - Style.space(3)
@@ -1329,7 +1330,7 @@ FormRow {
                   id: logoFontDD
                   placeholderText: "Search fonts…"
                   foreground: root.text
-                  popupBorder: Color.popups.border
+                  popupBorder: Commons.Color.popups.border
                   value: root.logoVal("logoFont", "")
                   options: root.logoFontOptions
                   onChanged: function(value) { root.setLogo("logoFont", value === "" ? null : value) }
@@ -1390,7 +1391,7 @@ FormRow {
                 visible: root.pickerError !== ""
                 wrapMode: Text.WordWrap
                 text: root.pickerError
-                color: Color.urgent
+                color: Commons.Color.urgent
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
               }
@@ -1491,7 +1492,7 @@ FormRow {
                   placeholderText: "#rrggbb"
                   font.family: Style.font.family
                   font.pixelSize: Style.font.body
-                  color: /^#?[0-9A-Fa-f]{6}$/.test(String(text).trim()) || String(text).trim() === "" ? root.text : Color.urgent
+                  color: /^#?[0-9A-Fa-f]{6}$/.test(String(text).trim()) || String(text).trim() === "" ? root.text : Commons.Color.urgent
                   foreground: root.text
                   onEditingFinished: {
                     var hex = String(text).trim()
@@ -1702,7 +1703,7 @@ FormRow {
       anchors.fill: parent
       radius: Math.min(Style.cornerRadius, Style.space(3))
       color: zone.dropHot
-        ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.16)
+        ? Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.16)
         : "transparent"
     }
 
@@ -1714,7 +1715,7 @@ FormRow {
       y: marker ? marker.y : 0
       width: marker ? marker.width : 0
       height: marker ? marker.height : 0
-      color: Color.accent
+      color: Commons.Color.accent
       radius: Math.min(width, height) / 2
     }
 
@@ -1839,7 +1840,7 @@ FormRow {
       anchors.fill: parent
       radius: Math.min(Style.cornerRadius, height / 3)
       color: chip.isSelected
-        ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.22)
+        ? Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.22)
         : (chipArea.containsMouse
            ? Qt.rgba(root.text.r, root.text.g, root.text.b, 0.07)
            : (chip.widgetHasContent ? "transparent" : Qt.rgba(root.text.r, root.text.g, root.text.b, 0.05)))
@@ -1852,7 +1853,7 @@ FormRow {
       height: parent.height - Style.space(4)
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
-      color: Color.accent
+      color: Commons.Color.accent
       radius: 1
     }
 
@@ -2001,7 +2002,7 @@ FormRow {
       width: tabLabel.implicitWidth
       height: 2
       radius: 1
-      color: Color.accent
+      color: Commons.Color.accent
       visible: tabButton.active
     }
 

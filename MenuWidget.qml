@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import QtQuick.Effects
 import qs.Commons
+import qs.Commons as Commons
 import Quickshell
 import qs.Ui
 
@@ -32,13 +33,13 @@ BarWidget {
   // changes, or a literal #rrggbb for full manual control.
   readonly property color resolvedLogoColor: {
     var token = root.logoColor
-    if (token === "accent") return Color.accent
-    if (token === "foreground") return Color.foreground
-    if (token === "urgent") return Color.urgent
-    if (token === "muted") return Color.muted
-    if (token === "background") return Color.background
+    if (token === "accent") return Commons.Color.accent
+    if (token === "foreground") return Commons.Color.foreground
+    if (token === "urgent") return Commons.Color.urgent
+    if (token === "muted") return Commons.Color.muted
+    if (token === "background") return Commons.Color.background
     if (/^#[0-9A-Fa-f]{6}$/.test(token)) return token
-    return Color.foreground
+    return Commons.Color.foreground
   }
   readonly property bool useImage: logoMode === "image"
 
@@ -264,7 +265,7 @@ BarWidget {
 
               Text {
                 text: root.bar && root.bar.weatherIcon ? root.bar.weatherIcon : "󰼰"
-                color: root.bar ? root.bar.foreground : Color.foreground
+                color: root.bar ? root.bar.foreground : Commons.Color.foreground
                 font.family: Style.font.family
                 font.pixelSize: Style.font.display
               }
@@ -277,14 +278,14 @@ BarWidget {
                   Text {
                     text: root.bar ? root.bar.weatherTemp : ""
                     textFormat: Text.PlainText
-                    color: root.bar ? root.bar.foreground : Color.foreground
+                    color: root.bar ? root.bar.foreground : Commons.Color.foreground
                     font.family: Style.font.family
                     font.pixelSize: Style.font.title
                   }
                   Text {
                     text: root.bar ? root.bar.weatherCondition : ""
                     textFormat: Text.PlainText
-                    color: Color.muted
+                    color: Commons.Color.muted
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
                     elide: Text.ElideRight
@@ -293,7 +294,7 @@ BarWidget {
                   Text {
                     text: root.bar ? root.bar.weatherPlace : ""
                     textFormat: Text.PlainText
-                    color: Color.muted
+                    color: Commons.Color.muted
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
                     elide: Text.ElideRight
@@ -303,7 +304,7 @@ BarWidget {
                 Text {
                   text: [root.bar ? root.bar.weatherWind : ""].filter(function(part) { return part !== "" }).join("  ·  ")
                   textFormat: Text.PlainText
-                  color: Color.muted
+                  color: Commons.Color.muted
                   font.family: Style.font.family
                   font.pixelSize: Style.font.bodySmall
                   visible: text !== ""
@@ -331,7 +332,7 @@ BarWidget {
               glyph: "󰂛"
               name: "Silence Notifications"
               active: root.bar && root.bar.dndState
-              foreground: root.bar ? root.bar.foreground : Color.foreground
+              foreground: root.bar ? root.bar.foreground : Commons.Color.foreground
               onActivated: controlsPanel.activateRow(0)
             }
 
@@ -340,7 +341,7 @@ BarWidget {
               glyph: "󰔎"
               name: "Night Light"
               active: root.bar && root.bar.nightlightState
-              foreground: root.bar ? root.bar.foreground : Color.foreground
+              foreground: root.bar ? root.bar.foreground : Commons.Color.foreground
               onActivated: controlsPanel.activateRow(1)
             }
 
@@ -349,7 +350,7 @@ BarWidget {
               glyph: "󰅶"
               name: "Stay Awake"
               active: root.bar && root.bar.stayAwakeState
-              foreground: root.bar ? root.bar.foreground : Color.foreground
+              foreground: root.bar ? root.bar.foreground : Commons.Color.foreground
               onActivated: controlsPanel.activateRow(2)
             }
 
@@ -358,7 +359,7 @@ BarWidget {
               glyph: "󰍬"
               name: "Dictation"
               active: root.bar && root.bar.dictationActive
-              foreground: root.bar ? root.bar.foreground : Color.foreground
+              foreground: root.bar ? root.bar.foreground : Commons.Color.foreground
               onActivated: controlsPanel.activateRow(3)
             }
           }
@@ -370,7 +371,7 @@ BarWidget {
 
             Text {
               text: "Notifications"
-              color: Color.muted
+              color: Commons.Color.muted
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
             }
@@ -379,7 +380,7 @@ BarWidget {
 
             Text {
               text: "Dismiss all"
-              color: Color.accent
+              color: Commons.Color.accent
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
               visible: notifListModel.count > 0
@@ -420,8 +421,8 @@ BarWidget {
                     anchors.fill: parent
                     radius: Math.max(2, Style.cornerRadius)
                     color: notifRowMouse.containsMouse
-                      ? Style.hoverFillFor(root.bar ? root.bar.foreground : Color.foreground,
-                          root.bar ? root.bar.foreground : Color.foreground)
+                      ? Style.hoverFillFor(root.bar ? root.bar.foreground : Commons.Color.foreground,
+                          root.bar ? root.bar.foreground : Commons.Color.foreground)
                       : "transparent"
                   }
 
@@ -441,8 +442,8 @@ BarWidget {
                     Text {
                       textFormat: Text.PlainText
                       text: model.glyph ? model.glyph : "󰂚"
-                      color: model.live === true ? Color.accent
-                        : (root.bar ? root.bar.foreground : Color.foreground)
+                      color: model.live === true ? Commons.Color.accent
+                        : (root.bar ? root.bar.foreground : Commons.Color.foreground)
                       font.family: Style.font.family
                       font.pixelSize: Style.font.icon
                       Layout.alignment: Qt.AlignTop
@@ -458,7 +459,7 @@ BarWidget {
                         Text {
                           text: model.summary || ""
                           textFormat: Text.PlainText
-                          color: root.bar ? root.bar.foreground : Color.foreground
+                          color: root.bar ? root.bar.foreground : Commons.Color.foreground
                           font.family: Style.font.family
                           font.pixelSize: Style.font.body
                           elide: Text.ElideRight
@@ -466,7 +467,7 @@ BarWidget {
                         }
                         Text {
                           text: root.relativeTime(model.timestamp)
-                          color: Color.muted
+                          color: Commons.Color.muted
                           font.family: Style.font.family
                           font.pixelSize: Style.font.caption
                         }
@@ -475,7 +476,7 @@ BarWidget {
                       Text {
                         text: model.body || ""
                         textFormat: Text.PlainText
-                        color: Color.muted
+                        color: Commons.Color.muted
                         font.family: Style.font.family
                         font.pixelSize: Style.font.bodySmall
                         wrapMode: Text.WrapAnywhere
@@ -488,7 +489,7 @@ BarWidget {
 
                     Text {
                       text: "󰅖"
-                      color: Color.muted
+                      color: Commons.Color.muted
                       font.family: Style.font.family
                       font.pixelSize: Style.font.iconSmall
                       Layout.alignment: Qt.AlignTop
@@ -521,7 +522,7 @@ BarWidget {
                     anchors.rightMargin: Style.space(10)
                     anchors.verticalCenter: parent.verticalCenter
                     height: 1
-                    color: Color.popups.border
+                    color: Commons.Color.popups.border
                     opacity: 0.45
                   }
                 }
@@ -531,7 +532,7 @@ BarWidget {
             Text {
               anchors.centerIn: parent
               text: "No notifications"
-              color: Color.muted
+              color: Commons.Color.muted
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
               visible: notifListModel.count === 0
@@ -552,7 +553,7 @@ BarWidget {
     property string glyph: ""
     property string name: ""
     property bool active: false
-    property color foreground: Color.foreground
+    property color foreground: Commons.Color.foreground
     property real tileSize: Style.space(56)
     signal activated()
 
@@ -563,10 +564,10 @@ BarWidget {
       id: tileSurface
       anchors.fill: parent
       radius: Math.min(Style.cornerRadius, Style.space(6))
-      color: tile.active ? Color.accent
+      color: tile.active ? Commons.Color.accent
         : Qt.rgba(tile.foreground.r, tile.foreground.g, tile.foreground.b,
             tileMouse.containsMouse ? 0.08 : 0.04)
-      borderSpec: Border.flat(tile.active ? Color.accent
+      borderSpec: Border.flat(tile.active ? Commons.Color.accent
         : Qt.rgba(tile.foreground.r, tile.foreground.g, tile.foreground.b, 0.15), 1)
 
       Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
@@ -574,7 +575,7 @@ BarWidget {
       Text {
         anchors.centerIn: parent
         text: tile.glyph
-        color: tile.active ? Color.background : tile.foreground
+        color: tile.active ? Commons.Color.background : tile.foreground
 
         Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
         font.family: Style.font.family
