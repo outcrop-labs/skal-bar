@@ -19,7 +19,7 @@ function entryId(entry) {
 }
 
 function layoutHasWidget(layout, id) {
-  var sections = ["left", "center", "right"]
+  var sections = ["left", "centerBegin", "center", "centerEnd", "right", "tray"]
   for (var s = 0; s < sections.length; s++) {
     var entries = layout && layout[sections[s]]
     if (!Array.isArray(entries)) continue

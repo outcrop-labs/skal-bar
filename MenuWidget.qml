@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Effects
 import qs.Commons
 import Quickshell
 import qs.Ui
@@ -102,19 +103,13 @@ BarWidget {
   }
 
   // Sibling, not child: a textless WidgetButton forces its whole subtree to
-  // opacity zero, which would swallow the image. The effective source is a
-  // tinted copy of the SVG (fills rewritten by the settings panel into
-  // ~/.cache/skal-bar) when a color is set; otherwise the original.
-  readonly property url effectiveLogoSource: {
-    // The tinted copy's presence is the gate: the foreground default clears
-    // logoColor but still tints, so keying on logoColor would skip it.
-    var tinted = root.logoImage !== "" ? String(setting("logoImageTinted", "")) : ""
-    if (tinted !== "") {
-      if (tinted.indexOf("~/") === 0) tinted = Quickshell.env("HOME") + tinted.substring(1)
-      return "file://" + tinted
-    }
-    return root.logoSource
-  }
+  // opacity zero, which would swallow the image. Tinting happens live, the
+  // way the host tray paints symbolic icons: the color is painted through the
+  // image's alpha, so it follows theme changes and needs no cached copy.
+  // SVG logos (silhouettes) always tint — to the bar foreground by default;
+  // raster logos keep their own colors unless a logo color is set.
+  readonly property bool logoIsSvg: /\.svgz?$/i.test(root.logoImage)
+  readonly property bool tintImage: root.logoIsSvg || root.logoColor !== ""
 
   Item {
     id: logoImageItem
@@ -124,12 +119,29 @@ BarWidget {
     height: width
 
     Image {
+      id: logoImageSource
       anchors.fill: parent
-      source: logoImageItem.visible ? root.effectiveLogoSource : ""
+      source: logoImageItem.visible ? root.logoSource : ""
       sourceSize: Qt.size(96, 96)
       fillMode: Image.PreserveAspectFit
       smooth: true
       mipmap: true
+      // Kept as a hidden layer when tinting so the mask can sample it.
+      visible: !root.tintImage
+      layer.enabled: root.tintImage
+    }
+
+    Rectangle {
+      anchors.fill: logoImageSource
+      color: root.resolvedLogoColor
+      visible: root.tintImage
+      layer.enabled: root.tintImage
+      layer.effect: MultiEffect {
+        maskEnabled: true
+        maskSource: logoImageSource
+        maskThresholdMin: 0.5
+        maskSpreadAtMin: 1.0
+      }
     }
   }
 

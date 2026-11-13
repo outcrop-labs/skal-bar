@@ -4,9 +4,13 @@ I love the stripped-down feel of the default Omarchy bar: a thin, quiet strip th
 
 That's skal.bar: the same minimal strip, now with Bartender-style hidden widget drawers, Noctalia-style appearance control, a native system tray, a quick action panel on the menu trigger, and a settings GUI so none of it requires editing JSON by hand.
 
+**Fully updated for Omarchy 4.5** — reads the new six-section layout (`centerBegin`, `centerEnd`, and the tray drawer section) so every widget `omarchy bar move` places shows up, with the clock kept centered like the stock bar.
+
 Runs inside `omarchy-shell`. Nothing in `/usr/share` is modified.
 
-![Widgets tucked behind per-section reveal indicators](preview.png)
+![Skål Bar collapsed and revealed, with the settings GUI](preview.png)
+
+![The bar with hidden widgets tucked away](bar-collapsed.png)
 
 ![The same bar with its drawers open](bar-expanded.png)
 
@@ -16,19 +20,15 @@ Each section is a Bartender strip: widgets hide behind a reveal indicator (`›`
 
 ![Settings GUI — Appearance tab](appearance-tab.png)
 
-The same idea at work across the bar — sections tuck away, then reappear the moment you ask:
+![Settings GUI — Logo tab](logo-tab.png)
 
-| Center tucked — `…` marks the drawer | Center revealed — `…` crossfades to `×` |
+The tray's arrow doubles as the right section's reveal — hidden widgets and tray icons slide out together:
+
+| Tucked | Revealed |
 |---|---|
-| ![Center section hidden behind the dots indicator](bar-center-hidden.png) | ![Center section revealed, dots crossfaded to an ×](bar-center-revealed.png) |
+| ![Right section with hidden widgets tucked behind the arrow](bar-right-collapsed.png) | ![Right section revealed, the arrow flipped](bar-right-revealed.png) |
 
-| Left — logo & workspaces | Indicators & tray |
-|---|---|
-| ![Left section with logo and workspaces](bar-left.png) | ![Indicator and tray cluster](bar-indicators.png) |
-
-And the same right end moments later, with more indicators active as toggles land:
-
-![Right section with more indicators active](bar-indicators-active.png)
+![Left section with the logo and workspaces](bar-left.png)
 
 ## Features
 
@@ -114,10 +114,14 @@ All keys live under `bar` in `~/.config/omarchy/shell.json`. Hot-reloads on save
 | `transparent` | `false` | Removes the background entirely (also: double-click blank center space) |
 | `widgetSpacing` | `0` | Gap in px between widgets |
 | `edgePadding` | theme | Padding at the outer ends of left/right sections |
-| `centerAnchor` | `"omarchy.clock"` | Pins one center module to the exact center; `""` centers the group |
+| `centerAnchor` | lone `center` widget | Pins one center module to the exact center. Unset, a single widget in `center` (with `centerBegin`/`centerEnd` around it) is the anchor, matching the stock bar |
 | `traySection` | `"right"` | `left` / `right` / `none` |
 
 CLI: `omarchy bar set <widget-id> <key> <value>`, e.g. `omarchy bar set omarchy.clock format HH:mm`.
+
+### Omarchy 4.5 sections
+
+Layouts written by Omarchy 4.5+ (`omarchy bar move`, the stock bar) use six sections. Skål Bar reads all of them: `centerBegin` and `center` and `centerEnd` render as one center group around the anchor, and the `tray` section — widgets the stock bar draws inside its tray drawer — joins the tray's side as hidden-until-reveal, so it slides out with the tray arrow. Moving a widget in the settings GUI writes it to `left`, `center`/`centerBegin`/`centerEnd`, or `right`.
 
 ### Widget hidden states
 
@@ -138,6 +142,16 @@ CLI: `omarchy bar set <widget-id> <key> <value>`, e.g. `omarchy bar set omarchy.
 
 `traySection` — `left` / `right` / `none`. Pinned/hidden tray items persist under `bar.tray`.
 
+The tray's own layout entry (`omarchy.tray`) takes the same hidden states as any widget — drag its chip between zones in the Widgets tab:
+
+| `hidden` on the tray entry | Tray icons |
+|---|---|
+| unset | pinned icons stay out, the rest live in the drawer |
+| `"hover"` | every icon, pinned ones included, tucks into the drawer |
+| `"always"` | no tray icons; the arrow stays only while the section has hidden widgets |
+
+Dragging the tray chip to the left or right row moves the tray there (`traySection`); the center row doesn't take it.
+
 ### Logo
 
 Settings for any cloned menu widget entry. `logoMode` picks the source:
@@ -145,7 +159,7 @@ Settings for any cloned menu widget entry. `logoMode` picks the source:
 | Value | Behavior |
 |---|---|
 | `"glyph"` | text/icon glyph (`logo`, `logoFont`, `logoSize`, `logoColor`) |
-| `"image"` | SVG image (`logoImage`, tinted by `logoColor` when set) |
+| `"image"` | image file (`logoImage`): SVG silhouettes tint to `logoColor` (bar foreground by default); PNG/JPG/WebP keep their colors unless `logoColor` is set |
 
 `logoColor` takes theme tokens (`accent`, `foreground`, `urgent`, `muted`, `background`) resolved live against the active theme, or a literal `#rrggbb`.
 
@@ -153,7 +167,9 @@ Settings for any cloned menu widget entry. `logoMode` picks the source:
 { "id": "your.menu", "logoMode": "image", "logoImage": "~/Pictures/logo.svg", "logoColor": "#C1C497" }
 ```
 
-The settings panel's Browse button opens the OS file picker (requires `zenity`), filtered to SVG.
+Tinting happens live — it follows theme changes and needs no cached copies. The settings panel's Browse button opens the OS file picker (requires `zenity`).
+
+A layout that still carries the stock `omarchy.menu` entry (every layout migrated from the stock bar) renders with Skål's menu widget, so the logo settings apply to it; right-click still opens the Omarchy menu.
 
 ### Quick menu
 
@@ -200,7 +216,15 @@ o.bind("SUPER + ESCAPE", "Quick actions", "omarchy-shell -q skal.bar.controls to
 o.bind("SUPER + ALT + B", "Bar settings", "omarchy-shell shell toggle skal.bar")
 ```
 
-Right-clicking blank bar space opens the same panel.
+Right-clicking blank bar space opens the same panel. Summon it on a given tab with a payload: `omarchy-shell shell summon skal.bar '{"tab":"logo"}'` (`appearance`, `widgets`, `logo`).
+
+### Reveal
+
+```lua
+o.bind("SUPER + ALT + H", "Reveal hidden widgets", "omarchy-shell -q skal.bar.controls toggleReveal ''")
+```
+
+Pins a section's drawer open or closed, like clicking its arrow: `toggleReveal left`, `center`, `right`, or `''` for the tray's section.
 
 ### Individual actions
 
